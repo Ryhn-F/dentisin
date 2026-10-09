@@ -1,0 +1,5 @@
+/* NativeWind entry (metro.config.js). Colors and sizes live in src/core/theme
+   and are exposed through tailwind.config.ts — do not add raw values here. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
