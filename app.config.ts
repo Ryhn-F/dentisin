@@ -22,6 +22,12 @@ const config: ExpoConfig = {
       monochromeImage: './assets/images/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
+    // Photos stay in the app's private cache (never the gallery) and nothing records audio.
+    blockedPermissions: [
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.WRITE_EXTERNAL_STORAGE',
+      'android.permission.RECORD_AUDIO',
+    ],
   },
   web: {
     // Web is used only for quick visual previews during development.
@@ -32,6 +38,16 @@ const config: ExpoConfig = {
     'expo-router',
     // Supabase session + no-account flag in the Android Keystore.
     'expo-secure-store',
+    // Still photos for screening only: no microphone permission, no barcode scanner (smaller APK).
+    [
+      'expo-camera',
+      {
+        cameraPermission: 'DentisAI memakai kamera untuk memotret gigi. Foto diperiksa di HP ini saja.',
+        microphonePermission: false,
+        recordAudioAndroid: false,
+        barcodeScannerEnabled: false,
+      },
+    ],
     [
       'expo-splash-screen',
       {

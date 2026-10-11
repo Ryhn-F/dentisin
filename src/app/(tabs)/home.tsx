@@ -17,6 +17,7 @@ import { StreakCounter, StreakLegend, StreakWeek } from '@/components/streak';
 import { SyncStatusPill } from '@/components/sync-status-pill';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { flags } from '@/core/flags';
 import { id } from '@/core/i18n/id';
 import { useSyncStatus } from '@/core/sync/use-sync-status';
 import { palette } from '@/core/theme';
@@ -100,7 +101,11 @@ export default function Home() {
       </View>
 
       {/* The main feature first (it is also the center tab). */}
-      <ScreeningCard testID="home-screening" onPress={() => router.navigate('/screening')} />
+      <ScreeningCard
+        testID="home-screening"
+        soon={!flags.medical_modules}
+        onPress={() => router.navigate('/screening')}
+      />
 
       {kid ? (
         <Card tone="blue" className="gap-5 p-6" testID="streak-card">

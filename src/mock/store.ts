@@ -2,7 +2,14 @@
 // Replaced in phase 4 by the local encrypted DB + outbox (app_plan.md §5, §6).
 import { create } from 'zustand';
 
-import type { BrushingRecord, BrushingSlot, ChildProfile, ConsentState, ConsentType } from '@/domain/models';
+import type {
+  BrushingRecord,
+  BrushingSlot,
+  ChildProfile,
+  ConsentState,
+  ConsentType,
+  ScreeningRecord,
+} from '@/domain/models';
 
 function daysAgo(days: number, hour: number, minute = 0): string {
   const d = new Date();
@@ -51,11 +58,14 @@ type MockState = {
   kids: ChildProfile[];
   activeChildId: string | null;
   brushing: BrushingRecord[];
+  /** Real results from the screening flow (no seed data: results are never faked). */
+  screenings: ScreeningRecord[];
   consents: Record<string, ConsentState>;
   setActiveChild: (id: string) => void;
   upsertChild: (child: ChildProfile) => void;
   setConsent: (childId: string, type: ConsentType, value: boolean) => void;
   addBrushing: (childId: string, durationS: number) => void;
+  addScreening: (record: ScreeningRecord) => void;
 };
 
 function slotFor(date: Date): BrushingSlot {
@@ -69,6 +79,7 @@ export const useMockData = create<MockState>((set) => ({
   kids: seedKids,
   activeChildId: seedKids[0].id,
   brushing: [...seedBrushing('mock-child-1'), ...seedBrushing('mock-child-2')],
+  screenings: [],
   consents: {
     'mock-child-1': { a: true, b: false, c: false },
     'mock-child-2': { a: true, b: false, c: false },
@@ -107,6 +118,7 @@ export const useMockData = create<MockState>((set) => ({
         ],
       };
     }),
+  addScreening: (record) => set((s) => ({ screenings: [record, ...s.screenings.filter((r) => r.id !== record.id)] })),
 }));
 
 export function newChildId(): string {

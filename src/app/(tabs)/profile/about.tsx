@@ -9,6 +9,7 @@ import { Mascot } from '@/components/mascot';
 import { Screen } from '@/components/screen';
 import { Text } from '@/components/ui/text';
 import { id } from '@/core/i18n/id';
+import { triageRules } from '@/domain/triage';
 
 const t = id.about;
 
@@ -26,7 +27,7 @@ export default function About() {
       <View className="gap-6 px-5">
         <ListGroup>
           <ListRow icon="smartphone" iconTone="blue" title={t.version} value={Constants.expoConfig?.version ?? '-'} />
-          <ListRow icon="rule" iconTone="sun" title={t.rulesVersion} value={t.notLoaded} />
+          <ListRow icon="rule" iconTone="sun" title={t.rulesVersion} value={triageRules.version} />
           <ListRow icon="memory" iconTone="coral" title={t.modelVersion} value={t.none} />
         </ListGroup>
 

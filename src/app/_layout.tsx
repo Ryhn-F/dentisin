@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { useSession } from '@/core/auth/session-store';
+import { flags } from '@/core/flags';
 import { id } from '@/core/i18n/id';
 import { usePrefs } from '@/core/prefs';
 import { ThemeProvider, useStackScreenOptions } from '@/core/theme';
@@ -32,6 +33,19 @@ function RootStack() {
           <Stack.Screen name="feature/toothpaste" options={{ title: id.toothpaste.title }} />
           <Stack.Screen name="feature/education/index" options={{ title: id.education.title }} />
           <Stack.Screen name="feature/education/[slug]" options={{ title: id.education.title }} />
+        </Stack.Protected>
+        {/* Photo screening + triage: behind `medical_modules` (ADR 002). */}
+        <Stack.Protected guard={canUseApp && flags.medical_modules}>
+          <Stack.Screen name="screening/questions" options={{ title: id.screening.redFlags.title }} />
+          <Stack.Screen name="screening/symptoms" options={{ title: id.screening.symptoms.title }} />
+          <Stack.Screen name="screening/guide" options={{ title: id.screening.guide.title }} />
+          <Stack.Screen name="screening/camera" options={{ headerShown: false, animation: 'fade' }} />
+          <Stack.Screen name="screening/review" options={{ title: id.screening.review.title }} />
+          <Stack.Screen
+            name="screening/result"
+            options={{ title: id.screening.result.title, headerBackVisible: false, gestureEnabled: false }}
+          />
+          <Stack.Screen name="screening/referral" options={{ title: id.screening.referral.title }} />
         </Stack.Protected>
         <Stack.Protected guard={status === 'signedOut'}>
           <Stack.Screen name="(entry)" options={{ headerShown: false }} />
