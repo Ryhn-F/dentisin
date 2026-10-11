@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
-import { View } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import { Banner } from '@/components/banner';
 import { HeroHeader } from '@/components/hero-header';
@@ -13,12 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { resendConfirmation, signIn } from '@/core/auth/auth-service';
 import { useSession } from '@/core/auth/session-store';
+import { useCaptcha } from '@/core/auth/use-captcha';
 import { isEmail } from '@/core/auth/validation';
-import { config, isSupabaseConfigured } from '@/core/config';
+import { isSupabaseConfigured } from '@/core/config';
 import { id } from '@/core/i18n/id';
 
 const t = id.auth;
-const captchaRequired = Boolean(config.turnstileSiteKey) && process.env.EXPO_OS !== 'web';
 
 export default function Login() {
   const continueAsGuest = useSession((s) => s.continueAsGuest);
@@ -29,8 +29,8 @@ export default function Login() {
   const [notConfirmed, setNotConfirmed] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [captchaKey, setCaptchaKey] = useState(0);
+  const captcha = useCaptcha('login');
+  const passwordRef = useRef<TextInput>(null);
 
   function validate() {
     const next: typeof errors = {};
@@ -41,25 +41,15 @@ export default function Login() {
     return Object.keys(next).length === 0;
   }
 
-  function resetCaptcha() {
-    // Turnstile tokens are single-use.
-    setCaptcha(null);
-    setCaptchaKey((k) => k + 1);
-  }
-
   async function onSubmit() {
     setFormError(null);
     setInfo(null);
     setNotConfirmed(false);
     if (!validate()) return;
-    if (captchaRequired && !captcha) {
-      setFormError(t.fieldErrors.captchaRequired);
-      return;
-    }
     setBusy(true);
-    const result = await signIn(email, password, captcha ?? undefined);
+    const result = await signIn(email, password, await captcha.take());
     setBusy(false);
-    resetCaptcha();
+    captcha.reset(); // tokens are single-use
     if (!result.ok) {
       if (result.code === 'email_not_confirmed') setNotConfirmed(true);
       else setFormError(result.message);
@@ -68,14 +58,10 @@ export default function Login() {
   }
 
   async function onResend() {
-    if (captchaRequired && !captcha) {
-      setFormError(t.fieldErrors.captchaRequired);
-      return;
-    }
     setBusy(true);
-    const result = await resendConfirmation(email, captcha ?? undefined);
+    const result = await resendConfirmation(email, await captcha.take());
     setBusy(false);
-    resetCaptcha();
+    captcha.reset();
     if (result.ok) {
       setNotConfirmed(false);
       setInfo(t.checkEmail.resent);
@@ -105,7 +91,10 @@ export default function Login() {
           <TextField
             label={t.email}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v);
+              if (errors.email) setErrors((e) => ({ ...e, email: undefined }));
+            }}
             error={errors.email}
             placeholder={t.emailPlaceholder}
             keyboardType="email-address"
@@ -114,11 +103,17 @@ export default function Login() {
             autoComplete="email"
             textContentType="emailAddress"
             returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <PasswordField
+            ref={passwordRef}
             label={t.password}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(v) => {
+              setPassword(v);
+              if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
+            }}
             error={errors.password}
             autoComplete="current-password"
             textContentType="password"
@@ -144,7 +139,7 @@ export default function Login() {
         {formError ? <Banner tone="error" message={formError} /> : null}
         {info ? <Banner tone="success" message={info} /> : null}
 
-        <Turnstile key={captchaKey} onToken={setCaptcha} />
+        <Turnstile key={captcha.widgetKey} status={captcha.status} onRetry={captcha.reset} {...captcha.widgetProps} />
 
         <View className="gap-3">
           <Button

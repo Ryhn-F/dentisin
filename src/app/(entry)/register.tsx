@@ -1,24 +1,24 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { View, type TextInput } from 'react-native';
 
 import { Banner } from '@/components/banner';
+import { CheckboxField } from '@/components/checkbox-field';
 import { HeroHeader } from '@/components/hero-header';
+import { Mascot } from '@/components/mascot';
 import { PasswordField } from '@/components/password-field';
 import { Screen } from '@/components/screen';
 import { TextField } from '@/components/text-field';
 import { Turnstile } from '@/components/turnstile';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Text } from '@/components/ui/text';
 import { signUp } from '@/core/auth/auth-service';
+import { useCaptcha } from '@/core/auth/use-captcha';
 import { checkPassword, isEmail, isPasswordValid } from '@/core/auth/validation';
-import { config, isSupabaseConfigured } from '@/core/config';
+import { isSupabaseConfigured } from '@/core/config';
 import { id } from '@/core/i18n/id';
-import { shadows } from '@/core/theme';
 
 const t = id.auth;
-const captchaRequired = Boolean(config.turnstileSiteKey) && process.env.EXPO_OS !== 'web';
 
 type FieldErrors = { email?: string; password?: string; confirm?: string; privacy?: string };
 
@@ -30,10 +30,16 @@ export default function Register() {
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [captchaKey, setCaptchaKey] = useState(0);
+  const captcha = useCaptcha('signup');
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
 
   const rules = useMemo(() => checkPassword(password), [password]);
+
+  // An error goes away as soon as the person starts fixing that field.
+  function clearError(field: keyof FieldErrors) {
+    if (errors[field]) setErrors((e) => ({ ...e, [field]: undefined }));
+  }
 
   function validate() {
     const next: FieldErrors = {};
@@ -49,26 +55,28 @@ export default function Register() {
   async function onSubmit() {
     setFormError(null);
     if (!validate()) return;
-    if (captchaRequired && !captcha) {
-      setFormError(t.fieldErrors.captchaRequired);
-      return;
-    }
     setBusy(true);
-    const result = await signUp(email, password, captcha ?? undefined);
+    const result = await signUp(email, password, await captcha.take());
     setBusy(false);
-    setCaptcha(null);
-    setCaptchaKey((k) => k + 1);
-    if (result.ok) router.replace('/check-email');
-    else setFormError(result.message);
+    captcha.reset(); // tokens are single-use
+    if (!result.ok) setFormError(result.message);
+    // Email confirmation is on (backend config): wait for the link. If the project ever
+    // auto-confirms, a session exists and the route guard opens Home.
+    else if (result.needsConfirmation) router.replace('/check-email');
   }
 
   return (
     <Screen flush>
       <HeroHeader>
-        <Text variant="display" accessibilityRole="header">
-          {t.registerHeroTitle}
-        </Text>
-        <Text variant="body">{t.signUpIntro}</Text>
+        <View className="flex-row items-end justify-between">
+          <View className="flex-1 gap-2 pr-2">
+            <Text variant="display" accessibilityRole="header">
+              {t.registerHeroTitle}
+            </Text>
+            <Text variant="body">{t.signUpIntro}</Text>
+          </View>
+          <Mascot size={88} mood="wow" />
+        </View>
       </HeroHeader>
 
       <View className="gap-5 px-5">
@@ -78,7 +86,10 @@ export default function Register() {
           <TextField
             label={t.email}
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(v) => {
+              setEmail(v);
+              clearError('email');
+            }}
             error={errors.email}
             placeholder={t.emailPlaceholder}
             keyboardType="email-address"
@@ -86,33 +97,52 @@ export default function Register() {
             autoCorrect={false}
             autoComplete="email"
             textContentType="emailAddress"
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <PasswordField
+            ref={passwordRef}
             label={t.password}
             value={password}
-            onChangeText={setPassword}
+            onChangeText={(v) => {
+              setPassword(v);
+              clearError('password');
+            }}
             error={errors.password}
             rules={rules}
             autoComplete="new-password"
             textContentType="newPassword"
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => confirmRef.current?.focus()}
           />
           <PasswordField
+            ref={confirmRef}
             label={t.passwordConfirm}
             value={confirm}
-            onChangeText={setConfirm}
+            onChangeText={(v) => {
+              setConfirm(v);
+              clearError('confirm');
+            }}
             error={errors.confirm}
             autoComplete="new-password"
             textContentType="newPassword"
+            returnKeyType="done"
           />
         </View>
 
-        <View className="gap-3 rounded-card bg-card p-4" style={{ boxShadow: shadows.card }}>
-          <View className="flex-row items-center gap-3">
-            <Checkbox checked={agreed} onCheckedChange={setAgreed} accessibilityLabel={t.privacyAgree} />
-            <Pressable className="flex-1" onPress={() => setAgreed((v) => !v)} accessibilityElementsHidden>
-              <Text variant="bodyStrong">{t.privacyAgree}</Text>
-            </Pressable>
-          </View>
+        <View className="gap-2">
+          <CheckboxField
+            testID="privacy-agree"
+            label={t.privacyAgree}
+            checked={agreed}
+            onCheckedChange={(v) => {
+              setAgreed(v);
+              if (v) clearError('privacy');
+            }}
+            error={errors.privacy}
+          />
           <Button
             title={t.privacyRead}
             variant="ghost"
@@ -120,16 +150,11 @@ export default function Register() {
             onPress={() => router.push('/privacy')}
             className="self-start"
           />
-          {errors.privacy ? (
-            <Text variant="caption" tone="danger">
-              {errors.privacy}
-            </Text>
-          ) : null}
         </View>
 
         {formError ? <Banner tone="error" message={formError} /> : null}
 
-        <Turnstile key={captchaKey} onToken={setCaptcha} />
+        <Turnstile key={captcha.widgetKey} status={captcha.status} onRetry={captcha.reset} {...captcha.widgetProps} />
 
         <View className="gap-3">
           <Button

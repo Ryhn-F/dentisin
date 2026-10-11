@@ -67,7 +67,10 @@ export default function ResetPassword() {
         <PasswordField
           label={t.newPassword}
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(v) => {
+            setPassword(v);
+            if (errors.password) setErrors((e) => ({ ...e, password: undefined }));
+          }}
           error={errors.password}
           rules={rules}
           autoComplete="new-password"
@@ -76,7 +79,10 @@ export default function ResetPassword() {
         <PasswordField
           label={t.passwordConfirm}
           value={confirm}
-          onChangeText={setConfirm}
+          onChangeText={(v) => {
+            setConfirm(v);
+            if (errors.confirm) setErrors((e) => ({ ...e, confirm: undefined }));
+          }}
           error={errors.confirm}
           autoComplete="new-password"
           textContentType="newPassword"

@@ -7,7 +7,7 @@ Self-contained frontend (ADR 010). Read `CLAUDE.md` (rules), `docs/design_princi
 npm install
 cp .env.example .env.local   # fill in Supabase URL/anon key + Turnstile site key (public values only)
 ```
-Without `.env.local` the app still runs fully in **no-account mode** ("Pakai tanpa akun"); sign-in/sign-up show a "server belum diatur" notice.
+Expo also reads `app/.env` (git-ignored). Without Supabase values the app still runs fully in **no-account mode** ("Pakai tanpa akun"); sign-in/sign-up show a "server belum diatur" notice.
 
 ## Commands (run from `app/`)
 ```bash
@@ -43,6 +43,20 @@ src/mock/                    PHASE 2 prototype data (in memory) — replaced by 
 src/ui/format.ts             date/duration formatting (Indonesian)
 __tests__/                   Jest tests
 ```
+
+## Auth (backend contract)
+Supabase Auth only (FastAPI has no auth endpoints). Sources: `backend/supabase/config.toml [auth]`, `backend/web/{auth/callback,captcha}`, `backend/docs/runbooks/auth-setup.md`, mailer `smtp-handler/`.
+
+| Topic | Contract | App |
+|---|---|---|
+| Password | min **8**, lower + upper + digit | `src/core/auth/validation.ts` (live checklist) |
+| Sign-up | email confirmation required; existing emails get the same answer (no enumeration) | `signUp()` → `/check-email` (resend cooldown 60 s = `max_frequency`) |
+| Email links | mailer → `<SUPABASE_URL>/auth/v1/verify` → `EXPO_PUBLIC_AUTH_REDIRECT_URL` = **`https://app.ryhnfir.dev/auth/callback`** → `dentisai://auth/callback?code=…` (PKCE) | `src/app/auth/callback.tsx`; reset links detected via `redirectType: "recovery"` |
+| CAPTCHA | Turnstile host page `<origin>/captcha/?sitekey=…&action=…` posts `{type:"turnstile",token}` / `{type:"turnstile_error",code}` | `src/core/auth/{captcha,use-captcha}.ts`, `components/turnstile.tsx`; token on sign-up, sign-in, resend, reset; never blocks a submit (server decides) |
+| Profile | signup trigger creates `guardian` row + role | roles read from `user_role` (RLS: own rows), cached for offline |
+| Errors | GoTrue `error_code` | fixed Indonesian texts in `src/core/auth/errors.ts`, incl. mailer-hook failures and the 60 s email limit |
+
+Web preview sends no CAPTCHA token (no WebView); test CAPTCHA on Android.
 
 ## Styling (ADR 011)
 - NativeWind v4 (`className`) with tokens from `src/core/theme` exposed via `tailwind.config.ts` (single source). Classes: `bg-primary`, `bg-sun`, `bg-coral`, `text-ink`, `text-ink-soft`, `text-title`, `rounded-card`, …

@@ -1,8 +1,9 @@
 import { id } from '@/core/i18n/id';
 
-// Mirrors backend/supabase/config.toml:
-//   minimum_password_length = 10, password_requirements = "lower_upper_letters_digits".
-export const PASSWORD_MIN_LENGTH = 10;
+// Mirrors backend/supabase/config.toml [auth]:
+//   minimum_password_length = 8 (owner decision 2026-10-10),
+//   password_requirements = "lower_upper_letters_digits".
+export const PASSWORD_MIN_LENGTH = 8;
 
 const t = id.auth.passwordRules;
 

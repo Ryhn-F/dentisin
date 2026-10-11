@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { View, type TextInputProps } from 'react-native';
+import { useState, type ReactNode, type Ref } from 'react';
+import { View, type TextInput, type TextInputProps } from 'react-native';
 
 import { useTheme } from '@/core/theme';
 import { cn } from '@/lib/utils';
@@ -13,6 +13,8 @@ export type TextFieldProps = TextInputProps & {
   error?: string | null;
   /** Element inside the field on the right (e.g. show-password button). */
   trailing?: ReactNode;
+  /** For moving focus to the next field ("Lanjut" on the keyboard). */
+  ref?: Ref<TextInput>;
 };
 
 // Rounded white field with a visible outline (3:1 non-text contrast, WCAG 1.4.11);

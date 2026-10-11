@@ -10,20 +10,18 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { resendConfirmation } from '@/core/auth/auth-service';
 import { useSession } from '@/core/auth/session-store';
-import { config } from '@/core/config';
+import { useCaptcha } from '@/core/auth/use-captcha';
 import { id } from '@/core/i18n/id';
 
 const t = id.auth.checkEmail;
 const RESEND_COOLDOWN_S = 60; // backend: auth.email max_frequency = "60s"
-const captchaRequired = Boolean(config.turnstileSiteKey) && process.env.EXPO_OS !== 'web';
 
 export default function CheckEmail() {
   const email = useSession((s) => s.pendingEmail);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN_S);
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [captchaKey, setCaptchaKey] = useState(0);
+  const captcha = useCaptcha('resend');
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -33,15 +31,10 @@ export default function CheckEmail() {
 
   async function onResend() {
     if (!email) return;
-    if (captchaRequired && !captcha) {
-      setMessage({ tone: 'error', text: id.auth.fieldErrors.captchaRequired });
-      return;
-    }
     setBusy(true);
-    const result = await resendConfirmation(email, captcha ?? undefined);
+    const result = await resendConfirmation(email, await captcha.take());
     setBusy(false);
-    setCaptcha(null);
-    setCaptchaKey((k) => k + 1);
+    captcha.reset(); // tokens are single-use
     setMessage(result.ok ? { tone: 'success', text: t.resent } : { tone: 'error', text: result.message });
     if (result.ok) setCooldown(RESEND_COOLDOWN_S);
   }
@@ -49,11 +42,19 @@ export default function CheckEmail() {
   return (
     <Screen>
       <EmptyState mascot="wow" title={t.title} message={email ? t.body(email) : t.bodyNoEmail} />
-      <Text variant="caption" tone="secondary" className="text-center">
-        {t.spamHint}
-      </Text>
+      <View className="gap-2">
+        <Text variant="caption" tone="secondary" className="text-center">
+          {t.spamHint}
+        </Text>
+        {/* Supabase answers a sign-up for an existing email the same way and sends nothing. */}
+        <Text variant="caption" tone="secondary" className="text-center">
+          {t.existingAccount}
+        </Text>
+      </View>
       {message ? <Banner tone={message.tone} message={message.text} /> : null}
-      {email ? <Turnstile key={captchaKey} onToken={setCaptcha} /> : null}
+      {email ? (
+        <Turnstile key={captcha.widgetKey} status={captcha.status} onRetry={captcha.reset} {...captcha.widgetProps} />
+      ) : null}
       <View className="gap-3">
         {email ? (
           <Button

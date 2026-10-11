@@ -3,6 +3,10 @@
 
 export type BrushingSlot = 'morning' | 'evening' | 'other';
 
+/** public.app_role. Read-only for the app (user_role has no client write grants). */
+export type AppRole = 'guardian' | 'kader' | 'facility_viewer' | 'admin';
+export const appRoles: readonly AppRole[] = ['guardian', 'kader', 'facility_viewer', 'admin'];
+
 export type ConsentType = 'a' | 'b' | 'c';
 
 export type ChildProfile = {

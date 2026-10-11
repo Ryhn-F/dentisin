@@ -1,6 +1,8 @@
 import type { Session } from '@supabase/supabase-js';
 import { create } from 'zustand';
 
+import { appRoles, type AppRole } from '@/domain/models';
+
 import { appStorage } from './secure-storage';
 import { supabase } from './supabase';
 
@@ -9,6 +11,8 @@ export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'guest';
 
 const GUEST_KEY = 'dentisai.guest';
 const SESSION_KEY = 'dentisai.auth';
+// Last known roles, so the profile shows the right badge offline.
+const ROLES_KEY = 'dentisai.roles';
 
 type SessionState = {
   status: AuthStatus;
@@ -18,7 +22,11 @@ type SessionState = {
   pendingEmail: string | null;
   /** True after a password-recovery link created a session. */
   recovering: boolean;
+  /** From public.user_role (the signup trigger always grants 'guardian'). */
+  roles: AppRole[];
   hydrate: () => Promise<void>;
+  /** Re-reads the account's roles; keeps the last known ones when offline. */
+  refreshRoles: () => Promise<void>;
   continueAsGuest: () => Promise<void>;
   leaveGuest: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -45,6 +53,20 @@ async function readStoredUser(): Promise<{ email: string | null; userId: string 
   }
 }
 
+function parseRoles(value: unknown): AppRole[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((r): r is AppRole => typeof r === 'string' && (appRoles as readonly string[]).includes(r));
+}
+
+async function readStoredRoles(): Promise<AppRole[]> {
+  try {
+    const raw = await appStorage.getItem(ROLES_KEY);
+    return raw ? parseRoles(JSON.parse(raw)) : [];
+  } catch {
+    return [];
+  }
+}
+
 let subscribed = false;
 
 export const useSession = create<SessionState>((set, get) => ({
@@ -53,6 +75,7 @@ export const useSession = create<SessionState>((set, get) => ({
   userId: null,
   pendingEmail: null,
   recovering: false,
+  roles: [],
 
   async hydrate() {
     const guest = (await appStorage.getItem(GUEST_KEY)) === '1';
@@ -66,7 +89,7 @@ export const useSession = create<SessionState>((set, get) => ({
         if (session) {
           set(fromSession(session));
         } else if (event === 'SIGNED_OUT') {
-          set({ status: get().status === 'guest' ? 'guest' : 'signedOut', email: null, userId: null });
+          set({ status: get().status === 'guest' ? 'guest' : 'signedOut', email: null, userId: null, roles: [] });
         }
       });
     }
@@ -74,12 +97,13 @@ export const useSession = create<SessionState>((set, get) => ({
     if (supabase) {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
-        set(fromSession(data.session));
+        set({ ...fromSession(data.session), roles: await readStoredRoles() });
+        void get().refreshRoles();
         return;
       }
       const stored = await readStoredUser();
       if (stored) {
-        set({ status: 'signedIn', ...stored });
+        set({ status: 'signedIn', ...stored, roles: await readStoredRoles() });
         return;
       }
     }
@@ -101,7 +125,22 @@ export const useSession = create<SessionState>((set, get) => ({
     // scope 'local' works offline; local data stays unless the user deletes it.
     if (supabase) await supabase.auth.signOut({ scope: 'local' });
     await appStorage.removeItem(SESSION_KEY);
-    set({ status: 'signedOut', email: null, userId: null, recovering: false });
+    await appStorage.removeItem(ROLES_KEY);
+    set({ status: 'signedOut', email: null, userId: null, recovering: false, roles: [] });
+  },
+
+  async refreshRoles() {
+    if (!supabase || get().status !== 'signedIn') return;
+    try {
+      // RLS: an account reads only its own rows (user_role_select_own).
+      const { data, error } = await supabase.from('user_role').select('role');
+      if (error || !data) return;
+      const roles = parseRoles(data.map((row: { role: unknown }) => row.role));
+      set({ roles });
+      await appStorage.setItem(ROLES_KEY, JSON.stringify(roles));
+    } catch {
+      // Offline: keep the last known roles.
+    }
   },
 
   setPendingEmail(email) {
