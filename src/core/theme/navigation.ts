@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
-import { setStatusBarStyle } from 'expo-status-bar';
-import { useCallback } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useCallback, useState } from 'react';
 
 import { palette } from './colors';
 import { fontFamilies } from './typography';
@@ -25,6 +25,15 @@ export const onPrimaryHeaderOptions = {
   headerTitleStyle: { fontFamily: fontFamilies.extrabold, fontSize: 18, color: palette.onPrimary },
 } as const;
 
+// Focused screens that want light icons. A set (not a toggle) because React Navigation
+// may run the next screen's focus before or after the previous screen's blur; the
+// result must not depend on that order.
+const lightRequests = new Set<symbol>();
+
+function applyStatusBarStyle() {
+  StatusBar.setStyle(lightRequests.size > 0 ? 'light' : 'dark');
+}
+
 /**
  * Light status-bar icons while a screen with a blue top block is focused.
  * Uses focus events because tab screens stay mounted (a <StatusBar> element would fight).
@@ -32,8 +41,25 @@ export const onPrimaryHeaderOptions = {
 export function useLightStatusBar() {
   useFocusEffect(
     useCallback(() => {
-      setStatusBarStyle('light');
-      return () => setStatusBarStyle('dark');
+      const token = Symbol('light-status-bar');
+      lightRequests.add(token);
+      applyStatusBarStyle();
+      return () => {
+        lightRequests.delete(token);
+        applyStatusBarStyle();
+      };
     }, []),
   );
+}
+
+/** True while this screen is focused (stack and tab screens stay mounted when covered). */
+export function useIsScreenFocused() {
+  const [focused, setFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
+  return focused;
 }

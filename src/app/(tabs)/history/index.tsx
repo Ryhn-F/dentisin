@@ -105,7 +105,12 @@ export default function History() {
             ))
           )
         ) : segment === 'screening' ? (
-          <EmptyState mascot="thinking" title={t.emptyScreeningTitle} message={t.emptyScreeningBody} />
+          <EmptyState
+            mascot="thinking"
+            title={t.emptyScreeningTitle}
+            message={t.emptyScreeningBody}
+            action={{ label: t.emptyScreeningAction, onPress: () => router.navigate('/screening') }}
+          />
         ) : (
           <EmptyState icon="description" title={t.emptyReferralTitle} message={t.emptyReferralBody} />
         )}

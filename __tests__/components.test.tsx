@@ -12,10 +12,18 @@ function inMode(mode: UiMode, ui: React.ReactElement) {
   return <ThemeProvider initialMode={mode}>{ui}</ThemeProvider>;
 }
 
-// Reanimated's Jest setup moves inline styles of animated components to `jestInlineStyle`.
-function minHeightOf(el: { props: { style?: unknown; jestInlineStyle?: unknown } }): number {
-  const style = StyleSheet.flatten([el.props.jestInlineStyle, el.props.style] as StyleProp<ViewStyle>);
-  return Number(style?.minHeight ?? 0);
+type StyledNode = {
+  props: { style?: unknown; jestInlineStyle?: unknown };
+  queryAll?: (predicate: (node: StyledNode) => boolean) => StyledNode[];
+};
+
+// The touch target is the tallest minHeight on the control or inside it: PressableScale
+// puts it on the inner visual layer. Reanimated's Jest setup moves inline styles of
+// animated components to `jestInlineStyle`.
+function minHeightOf(el: StyledNode): number {
+  const own = (node: StyledNode) =>
+    Number(StyleSheet.flatten([node.props.jestInlineStyle, node.props.style] as StyleProp<ViewStyle>)?.minHeight ?? 0);
+  return Math.max(own(el), ...(el.queryAll?.(() => true) ?? []).map(own));
 }
 
 describe('Button', () => {

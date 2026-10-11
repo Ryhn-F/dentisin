@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 
 import { useSession } from '@/core/auth/session-store';
 import { id } from '@/core/i18n/id';
+import { usePrefs } from '@/core/prefs';
 import { ThemeProvider, useStackScreenOptions } from '@/core/theme';
 import { fontAssets } from '@/core/theme/fonts';
 
@@ -50,13 +51,18 @@ export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts(fontAssets);
   const status = useSession((s) => s.status);
   const hydrate = useSession((s) => s.hydrate);
+  const prefsReady = usePrefs((s) => s.hydrated);
+  const mode = usePrefs((s) => s.mode);
+  const setMode = usePrefs((s) => s.setMode);
+  const hydratePrefs = usePrefs((s) => s.hydrate);
 
   useEffect(() => {
     hydrate().catch(() => useSession.setState({ status: 'signedOut' }));
-  }, [hydrate]);
+    hydratePrefs();
+  }, [hydrate, hydratePrefs]);
 
   // A missing font must not block the app: fall back to the system font.
-  const ready = (fontsLoaded || !!fontError) && status !== 'loading';
+  const ready = (fontsLoaded || !!fontError) && status !== 'loading' && prefsReady;
 
   useEffect(() => {
     if (ready) SplashScreen.hideAsync().catch(() => {});
@@ -65,7 +71,7 @@ export default function RootLayout() {
   if (!ready) return null;
 
   return (
-    <ThemeProvider>
+    <ThemeProvider mode={mode} onModeChange={setMode}>
       <RootStack />
     </ThemeProvider>
   );

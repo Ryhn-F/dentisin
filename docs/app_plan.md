@@ -87,7 +87,7 @@ src/app/
     register.tsx
     forgot-password.tsx
     callback.tsx              deep link dentisai://auth/callback (confirm / reset)
-  (tabs)/_layout.tsx          Native bottom tabs: Beranda · Fitur · Riwayat · Profil
+  (tabs)/_layout.tsx          JS bottom tabs: Beranda · Fitur · Skrining (raised center) · Riwayat · Profil
     home.tsx
     features.tsx
     history/index.tsx
@@ -102,7 +102,7 @@ src/app/
   features/education/[slug].tsx
   features/screening/...      behind medical_modules (not built in this plan)
 ```
-Tabs = 4 destinations with icon + label (child-friendly, always visible). Account settings is a stack screen under Profil, not a tab.
+Tabs = 5 destinations with icon + label (child-friendly, always visible); **Skrining sits in the middle as a raised round button** (main feature, 2026-10-10). While `medical_modules` is off, the Skrining tab explains how screening will work ("Segera hadir") and offers brushing / "Kapan ke dokter gigi?". Account settings is a stack screen under Profil, not a tab.
 
 ---
 

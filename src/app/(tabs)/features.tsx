@@ -9,8 +9,9 @@ import { id } from '@/core/i18n/id';
 
 const t = id.features;
 
-// Bold course-card grid (design reference 1). Unavailable features say why; class
-// mode appears only for the `kader` role (role lookup arrives in phase 4).
+// Bold course-card grid (design reference 1). Skrining, the main feature, comes first
+// and opens its tab; while it waits for the dentist's sign-off the tile says so.
+// Class mode appears only for the `kader` role (role lookup arrives in phase 4).
 export default function Features() {
   return (
     <Screen className="gap-4">
@@ -18,8 +19,17 @@ export default function Features() {
         {t.intro}
       </Text>
       <FeatureTile
-        icon="timer"
+        testID="feature-screening"
+        icon="photo-camera"
         tone="blue"
+        title={t.screening.title}
+        description={t.screening.description}
+        statusLabel={flags.medical_modules ? undefined : id.common.soon}
+        onPress={() => router.navigate('/screening')}
+      />
+      <FeatureTile
+        icon="timer"
+        tone="sun"
         title={t.brushing.title}
         description={t.brushing.description}
         onPress={() => router.push('/brushing/session')}
@@ -29,7 +39,7 @@ export default function Features() {
           compact
           style={{ flex: 1 }}
           icon="opacity"
-          tone="sun"
+          tone="lavender"
           title={t.toothpaste.title}
           onPress={() => router.push('/feature/toothpaste')}
         />
@@ -42,14 +52,6 @@ export default function Features() {
           onPress={() => router.push('/feature/education')}
         />
       </View>
-      <FeatureTile
-        icon="photo-camera"
-        tone="lavender"
-        title={t.screening.title}
-        description={t.screening.description}
-        status={flags.medical_modules ? 'active' : 'soon'}
-        statusLabel={flags.medical_modules ? undefined : t.screening.status}
-      />
     </Screen>
   );
 }

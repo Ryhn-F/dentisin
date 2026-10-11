@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
+  cancelAnimation,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
@@ -45,6 +46,11 @@ export function Mascot({
         -1,
       ),
     );
+    // An endless animation must stop with its screen, or it keeps the UI thread busy.
+    return () => {
+      cancelAnimation(y);
+      y.set(0);
+    };
   }, [float, reduceMotion, y]);
 
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ translateY: y.get() }] }));

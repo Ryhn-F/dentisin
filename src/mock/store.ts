@@ -80,7 +80,8 @@ export const useMockData = create<MockState>((set) => ({
       return {
         kids: exists ? s.kids.map((k) => (k.id === child.id ? child : k)) : [...s.kids, child],
         activeChildId: s.activeChildId ?? child.id,
-        consents: s.consents[child.id] ? s.consents : { ...s.consents, [child.id]: { a: true, b: false, c: false } },
+        // Every consent starts off for a new child (app/CLAUDE.md §3.5).
+        consents: s.consents[child.id] ? s.consents : { ...s.consents, [child.id]: { a: false, b: false, c: false } },
       };
     }),
   setConsent: (childId, type, value) =>

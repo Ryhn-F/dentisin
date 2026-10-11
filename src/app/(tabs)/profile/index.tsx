@@ -12,23 +12,39 @@ import { Text } from '@/components/ui/text';
 import { useSession } from '@/core/auth/session-store';
 import { id } from '@/core/i18n/id';
 import { useUiMode } from '@/core/theme';
+import type { AppRole } from '@/domain/models';
 import { useMockData } from '@/mock/store';
 import { ageInYears } from '@/ui/format';
 
 const t = id.profile;
 const kidTones: IconTileTone[] = ['sun', 'coral', 'mint', 'lavender'];
 
+// The most specific role wins the badge (an account can hold several).
+const rolePriority: AppRole[] = ['admin', 'facility_viewer', 'kader', 'guardian'];
+const roleLabel: Record<AppRole, string> = {
+  admin: t.roleAdmin,
+  facility_viewer: t.roleFacility,
+  kader: t.roleKader,
+  guardian: t.roleGuardian,
+};
+
+function badgeRole(roles: readonly AppRole[]): AppRole {
+  // Every account gets 'guardian' at sign-up (backend signup trigger).
+  return rolePriority.find((r) => roles.includes(r)) ?? 'guardian';
+}
+
 export default function Profile() {
   const { mode, setMode } = useUiMode();
   const status = useSession((s) => s.status);
   const email = useSession((s) => s.email);
+  const roles = useSession((s) => s.roles);
   const leaveGuest = useSession((s) => s.leaveGuest);
   const kids = useMockData((s) => s.kids);
   const guest = status === 'guest';
 
   return (
     <Screen flush>
-      <HeroHeader>
+      <HeroHeader ring={!guest}>
         <View className="flex-row items-center gap-4">
           <View className="size-20 items-center justify-center rounded-full bg-card">
             <Mascot size={70} />
@@ -42,7 +58,7 @@ export default function Profile() {
             ) : (
               <View className="self-start rounded-full bg-sun px-3 py-1">
                 <Text variant="label" tone="onAccent">
-                  {t.roleGuardian}
+                  {roleLabel[badgeRole(roles)]}
                 </Text>
               </View>
             )}

@@ -83,6 +83,8 @@ export const contrastPairs: readonly ContrastPair[] = [
   { name: 'onPrimary on primaryDeep', fg: p.onPrimary, bg: p.primaryDeep },
   { name: 'onAccent on accent', fg: p.onAccent, bg: p.accent },
   { name: 'onCoral on coral', fg: p.onCoral, bg: p.coral },
+  // Step-number badges (white on navy).
+  { name: 'onPrimary on text', fg: p.onPrimary, bg: p.text },
   ...triageLevels.map((level) => ({
     name: `level ${level}`,
     fg: levelColors[level].on,

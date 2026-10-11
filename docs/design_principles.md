@@ -26,7 +26,7 @@ Satu set token, dua "kepadatan" (bukan dua app):
 
 | | **Mode Anak** | **Mode Orang Tua / Kader / Guru** |
 |---|---|---|
-| Navigasi | Selalu terlihat, **ikon + kata**, maks 3 tujuan | Tab bawah standar Android, ikon + label |
+| Navigasi | Selalu terlihat, **ikon + kata**, maks 3 tujuan *(belum terpenuhi: tab bar saat ini sama untuk kedua mode, 5 tab — lihat §13)* | Tab bawah standar Android, ikon + label |
 | Target sentuh | **≥ 56dp** (tombol utama 64dp) | **≥ 48dp** |
 | Teks isi | ≥ 18sp | ≥ 16sp |
 | Gestur | tap / geser / seret saja; tanpa pinch/double-tap | + gestur standar sistem (back) |
@@ -158,10 +158,14 @@ Kartu statis: satu gagasan, satu gambar, ≤ 3 baris; audio ter-bundel (+ label 
 ## 6. Komponen & pola
 - **Kontrak komponen:** varian, ukuran, state (default/pressed/disabled/loading), `style` digabung terakhir, `accessibilityRole/Label/State`. Ekstrak ke `src/components` hanya bila dipakai ≥ 2 layar dan punya peran bernama.
 - **Tombol (pil):** `accent` kuning (CTA utama layar — mis. Masuk, Mulai sikat gigi), `primary` biru, `secondary` lavender, `ghost` (tautan), `inverse` (putih di atas biru), `danger` (hanya aksi destruktif). Satu CTA utama per layar. Tekan: skala pegas 0,96 (Reanimated) — **jangan** `TouchableOpacity`; baris daftar berubah latar, bukan "squish".
-- **Lapisan tekan (wajib, ADR 011):** `Pressable` (sentuh + a11y + tata letak) → `Animated.View` (transform saja) → `View` (kelas visual). Jangan pasang `className` pada komponen Reanimated dan jangan `cssInterop` pada Pressable animasi.
+- **Lapisan tekan (wajib, ADR 011):** `Pressable` (sentuh + a11y + tata letak) → `Animated.View` (transform saja) → `View` (kelas visual + `minHeight` touch target). Jangan pasang `className` pada komponen Reanimated dan jangan `cssInterop` pada Pressable animasi. Lapisan **tidak** memakai `flexGrow` kecuali `fill` (ubin berdampingan): di Android, anak yang tumbuh di dalam Pressable ber-`self-*` runtuh jadi lebar 0 dan tinggi tak terbatas (bug "Baca pemberitahuan privasi", 2026-10-10).
+- **Kotak centang berlabel:** seluruh baris = satu kontrol (`CheckboxField`, peran `checkbox`), bukan kotak kecil + label terpisah; galat = garis merah + teks di bawah, hilang begitu diperbaiki.
+- **Galat form:** inline per field dan **hilang saat field itu diubah**; tombol "Lanjut" di keyboard pindah ke field berikutnya.
 - **Daftar & bagian:** grup putih membulat + hairline dengan **ikon tile berwarna** di kiri (referensi 1), **bukan kartu terpisah per baris**; kartu dipakai untuk hal yang memang "satu objek" (streak, hasil, anak), tidak bersarang.
 - **Hero:** blok biru penuh dengan sudut bawah membulat & blob (`HeroHeader`) di bawah header navigasi transparan — judul/kembali tetap milik navigator.
-- **Navigasi:** judul dari header Stack (bukan `<Text>` buatan; Beranda memakai blok sapaan karena tab akar tanpa kembali); tab bawah putih menempel (tidak melayang) dengan **indikator pil biru** di belakang ikon aktif + label (gaya M3; label wajib untuk anak); tombol kembali sistem.
+- **Navigasi:** judul dari header Stack (bukan `<Text>` buatan; Beranda memakai blok sapaan karena tab akar tanpa kembali); tab bawah putih menempel (tidak melayang) dengan **indikator pil biru** di belakang ikon aktif + label (gaya M3; label wajib untuk anak); tombol kembali sistem. **Lima tab: Beranda · Fitur · Skrining · Riwayat · Profil** — Skrining (fitur utama) di tengah sebagai **lingkaran biru 64dp yang menonjol** ±22dp di atas bilah, cincin kuning saat aktif, tetap ber-peran `tab` dengan label. Tab bar disembunyikan saat keyboard terbuka.
+- **Konten di bawah area transparan:** saat digulir di bawah status bar / header transparan, bilah solid (biru di layar hero, lavender di Beranda) memudar masuk (`Screen` `topScrim`) agar teks tak bertabrakan dengan jam atau tombol kembali.
+- **Status bar:** gaya terang diminta per layar fokus (`useLightStatusBar`, berbasis himpunan — tidak bergantung urutan event fokus/blur).
 - **Sheet/dialog:** sheet bawah dengan handle & geser-tutup; `Alert` hanya untuk aksi tak terbalikkan yang jarang (mis. hapus data) — rutin = bisa **Urungkan**. Validasi form = inline, bukan alert. Sukses = UI berubah, bukan "Berhasil!".
 - **Empat state per layar berdata:** loading (skeleton bila tata letak diketahui) ≠ kosong ≠ error ≠ konten. Jangan tampilkan "Belum ada data" saat muat pertama. Offline = status normal, bukan error; tampilkan status sinkron yang jelas.
 - **Keyboard:** tombol utama form tak boleh tertutup (pakai `react-native-keyboard-controller`); `keyboardShouldPersistTaps="handled"`.
@@ -240,6 +244,7 @@ Screenshot-only (periksa manual): kartu bersarang, kotak 1px di semua kontainer,
 1. Drg pembimbing menyetujui **kata level triase** & contoh bahasa awam (belum ada drg → tanpa klaim klinis).
 2. Telaah gambar 8 shot Dribbble (riset §2) → papan suasana; 3 arah maskot orisinal.
 3. ✅ Token, komponen, dan tema v3 (ADR 011). Berikutnya: komisi ilustrasi maskot (pose lengkap §4) menggantikan SVG placeholder.
+4. **Mode anak vs 5 tab:** §2 meminta maks 3 tujuan untuk anak. Opsi: di mode anak tampilkan hanya Beranda · Skrining · Riwayat (Fitur/Profil lewat Beranda). Putuskan setelah uji dengan 5 anak (app/CLAUDE.md §8).
 4. ✅ Font: Plus Jakarta Sans (OFL, tercatat di `LICENSES.md`).
 5. Uji keterbacaan & kegunaan dengan 5 anak kelas 4 SD (butuh KEPK bila melibatkan data anak — lihat CLAUDE.md §8: **belum ada**, jadi uji awal hanya prototipe tanpa pengumpulan data pribadi dan seizin sekolah/orang tua).
 6. Uji font scale 200% pada semua komponen di HP nyata (tema gelap tidak dikirim).

@@ -1,6 +1,7 @@
+import { useKeepAwake } from 'expo-keep-awake';
 import { Stack, router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Blob, Ring, Sparkle } from '@/components/decor';
@@ -12,6 +13,7 @@ import { id } from '@/core/i18n/id';
 import { onPrimaryHeaderOptions, palette, useLightStatusBar } from '@/core/theme';
 import { TARGET_DURATION_S } from '@/domain/brushing-windows';
 import { useMockData } from '@/mock/store';
+import { cn } from '@/lib/utils';
 import { formatClock } from '@/ui/format';
 
 const t = id.brushing;
@@ -20,11 +22,45 @@ const HEADER_BAR = 56;
 
 type Phase = 'idle' | 'running' | 'paused' | 'done';
 
+// A 2-minute session must not be cut off by the phone's screen timeout.
+function KeepScreenOn() {
+  useKeepAwake('brushing-session');
+  return null;
+}
+
+// Four mouth zones, an equal share of the session each (30 s at 2 minutes): a game-like
+// guide, not a clinical assessment (app/CLAUDE.md §6.4).
+function ZoneGuide({ zone }: { zone: number }) {
+  return (
+    <View
+      accessible
+      accessibilityLabel={t.zoneLabel(zone + 1, t.zones[zone])}
+      accessibilityLiveRegion="polite"
+      className="mt-6 items-center gap-2.5"
+    >
+      <View className="flex-row gap-1.5">
+        {t.zones.map((name, i) => (
+          <View
+            key={name}
+            className={cn('h-2.5 w-11 rounded-full', i < zone ? 'bg-sun' : i === zone ? 'bg-card' : 'bg-card/35')}
+          />
+        ))}
+      </View>
+      <Text variant="bodyStrong" className="text-center">
+        {`${t.zoneNow} ${t.zones[zone]}`}
+      </Text>
+    </View>
+  );
+}
+
 // Timer-only mode (PRD FR-61): no camera until spikes S2/S3 pass. Phase 5 adds
 // music, keep-awake, slot windows and check-in recording via the outbox.
 // Layout follows design reference 1's detail screen: bold stage + white sheet.
 export default function BrushingSession() {
   const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  // Small phones: shrink the ring so ring + zone guide always fit the stage.
+  const ringSize = Math.round(Math.min(260, Math.max(180, height * 0.3)));
   useLightStatusBar();
   const activeChildId = useMockData((s) => s.activeChildId);
   const addBrushing = useMockData((s) => s.addBrushing);
@@ -51,10 +87,13 @@ export default function BrushingSession() {
   }, [done, elapsed, activeChildId, addBrushing]);
 
   const remaining = TARGET_DURATION_S - elapsed;
+  const zone = Math.min(t.zones.length - 1, Math.floor((elapsed / TARGET_DURATION_S) * t.zones.length));
+  const active = !done && (phase === 'running' || phase === 'paused');
 
   return (
     <View className="flex-1 bg-bg">
       <Stack.Screen options={onPrimaryHeaderOptions} />
+      {active ? <KeepScreenOn /> : null}
       <TextClassContext.Provider value="text-primary-on">
         <View
           className="flex-1 items-center justify-center overflow-hidden rounded-b-sheet bg-primary"
@@ -75,18 +114,21 @@ export default function BrushingSession() {
               </Text>
             </View>
           ) : (
-            <ProgressRing
-              progress={elapsed / TARGET_DURATION_S}
-              size={260}
-              strokeWidth={22}
-              trackColor={palette.primaryDeep}
-              color={palette.accent}
-              accessibilityLabel={t.ringLabel(remaining)}
-            >
-              <Mascot size={86} withBrush mood={running ? 'happy' : 'wow'} />
-              <Text variant="hero">{formatClock(remaining)}</Text>
-              <Text variant="label">{t.remaining}</Text>
-            </ProgressRing>
+            <View className="items-center">
+              <ProgressRing
+                progress={elapsed / TARGET_DURATION_S}
+                size={ringSize}
+                strokeWidth={22}
+                trackColor={palette.primaryDeep}
+                color={palette.accent}
+                accessibilityLabel={t.ringLabel(remaining)}
+              >
+                <Mascot size={86} withBrush mood={running ? 'happy' : 'wow'} />
+                <Text variant="hero">{formatClock(remaining)}</Text>
+                <Text variant="label">{t.remaining}</Text>
+              </ProgressRing>
+              <ZoneGuide zone={zone} />
+            </View>
           )}
         </View>
       </TextClassContext.Provider>

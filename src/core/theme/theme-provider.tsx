@@ -10,13 +10,20 @@ const ModeContext = createContext<ModeState | null>(null);
 
 export function ThemeProvider({
   initialMode = 'adult',
+  mode: controlledMode,
+  onModeChange,
   children,
 }: {
   initialMode?: UiMode;
+  /** Controlled mode (the app persists it); without it the provider keeps its own state. */
+  mode?: UiMode;
+  onModeChange?: (mode: UiMode) => void;
   children: ReactNode;
 }) {
-  const [mode, setMode] = useState<UiMode>(initialMode);
-  const value = useMemo(() => ({ mode, setMode }), [mode]);
+  const [ownMode, setOwnMode] = useState<UiMode>(initialMode);
+  const mode = controlledMode ?? ownMode;
+  const setMode = onModeChange ?? setOwnMode;
+  const value = useMemo(() => ({ mode, setMode }), [mode, setMode]);
   return <ModeContext value={value}>{children}</ModeContext>;
 }
 
