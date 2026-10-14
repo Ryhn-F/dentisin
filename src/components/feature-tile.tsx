@@ -53,13 +53,20 @@ export function FeatureTile({
       <PressableScale
         testID={testID}
         accessibilityRole="button"
-        accessibilityLabel={[title, description, statusLabel].filter(Boolean).join('. ')}
+        // One sentence per part; strip end punctuation first so it never reads "..".
+        accessibilityLabel={[title, description, statusLabel]
+          .filter((part): part is string => !!part)
+          .map((part) => part.replace(/[.!?]+$/, ''))
+          .join('. ')}
         accessibilityState={{ disabled }}
         disabled={disabled}
         onPress={onPress}
         className={cn('justify-between gap-4 overflow-hidden rounded-card p-5', t.bg)}
         style={{ borderCurve: 'continuous' }}
-        containerStyle={[{ minHeight: compact ? touch.large * 2.4 : touch.large * 2.6 }, style]}
+        minHeight={compact ? touch.large * 2.4 : touch.large * 2.6}
+        // Tiles sit side by side in rows: grow with the tallest one.
+        fill
+        containerStyle={style}
       >
         <Blob color={t.blob} size={compact ? 110 : 150} variant={1} opacity={0.35} style={{ right: -36, top: -40 }} />
         <Ring color={t.ring} size={compact ? 44 : 56} thickness={8} opacity={0.6} style={{ right: 18, bottom: -14 }} />

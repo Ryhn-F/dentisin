@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "status": "PLACEHOLDER",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "source": null,
+  "working_size": {
+    "max_side": 320
+  },
+  "blur": {
+    "min_laplacian_var": 60
+  },
+  "brightness": {
+    "min_mean": 50,
+    "max_mean": 220,
+    "dark_level": 16,
+    "bright_level": 245,
+    "max_dark_fraction": 0.5,
+    "max_bright_fraction": 0.25
+  },
+  "teeth_visible": {
+    "roi_fraction": 0.6,
+    "tooth_min_value": 150,
+    "tooth_max_saturation_pct": 35,
+    "tissue_min_red_margin": 25,
+    "min_tooth_fraction": 0.06,
+    "max_tooth_fraction": 0.85,
+    "min_tissue_fraction": 0.03
+  }
+}

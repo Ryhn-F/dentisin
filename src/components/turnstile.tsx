@@ -1,74 +1,96 @@
 import { View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
-import { config } from '@/core/config';
+import { captchaPageUrl, config } from '@/core/config';
+import {
+  isAllowedCaptchaNavigation,
+  parseCaptchaMessage,
+  tokenFromCaptchaUrl,
+  type CaptchaAction,
+} from '@/core/auth/captcha';
+import type { CaptchaStatus } from '@/core/auth/use-captcha';
 import { id } from '@/core/i18n/id';
+import { palette } from '@/core/theme';
 
+import { Icon } from './icon';
+import { Button } from './ui/button';
 import { Text } from './ui/text';
 
-// Cloudflare Turnstile in a WebView (Supabase CAPTCHA, backend config.toml [auth.captcha]).
-// Tokens are single-use: re-mount the widget (change its `key`) after each submit.
-// Only the PUBLIC site key lives in the app; the secret is set in the Supabase dashboard.
+const t = id.auth;
+// Fits the host page's message line + the 65dp Turnstile widget (backend/web/captcha).
+const WIDGET_HEIGHT = 150;
 
-const ALLOWED_PREFIXES = ['about:', 'https://challenges.cloudflare.com'];
-
-function html(siteKey: string) {
-  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onLoad&render=explicit" async defer></script>
-</head><body style="margin:0;display:flex;justify-content:center;background:transparent">
-<div id="w"></div>
-<script>
-function post(type, value){ window.ReactNativeWebView.postMessage(JSON.stringify({ type: type, value: value || null })); }
-function onLoad(){
-  turnstile.render('#w', {
-    sitekey: ${JSON.stringify(siteKey)},
-    language: 'id',
-    theme: 'light',
-    callback: function(token){ post('token', token); },
-    'expired-callback': function(){ post('expired'); },
-    'error-callback': function(code){ post('error', String(code)); }
-  });
-}
-</script></body></html>`;
-}
-
+// Cloudflare Turnstile via the backend's host page (backend/web/captcha/index.html) in a
+// WebView; the page posts the one-time token back (contract: src/core/auth/captcha.ts).
+// Only the PUBLIC site key is in the app; the secret lives in Supabase Auth.
+// Remount (change `key`) after each submit: tokens are single-use.
 export function Turnstile({
+  action,
+  status,
   onToken,
+  onError,
+  onRetry,
   testID,
 }: {
-  /** Called with a token, or null when it expired / failed. */
-  onToken: (token: string | null) => void;
+  action: CaptchaAction;
+  status: CaptchaStatus;
+  onToken: (token: string) => void;
+  onError: (code: string) => void;
+  onRetry: () => void;
   testID?: string;
 }) {
   const siteKey = config.turnstileSiteKey;
-  if (!siteKey) return null; // CAPTCHA off (local dev); the server decides if that is allowed.
+  if (!siteKey || status === 'off') return null; // CAPTCHA off in this build.
 
   function onMessage(event: WebViewMessageEvent) {
-    try {
-      const msg = JSON.parse(event.nativeEvent.data) as { type: string; value: string | null };
-      onToken(msg.type === 'token' && msg.value ? msg.value : null);
-    } catch {
-      onToken(null);
-    }
+    const msg = parseCaptchaMessage(event.nativeEvent.data);
+    if (msg.kind === 'token') onToken(msg.token);
+    else if (msg.kind === 'error') onError(msg.code);
   }
 
   return (
-    <View testID={testID} className="h-[72px] gap-1" accessibilityLabel={id.auth.captchaLabel}>
-      <WebView
-        source={{ html: html(siteKey), baseUrl: config.turnstileBaseUrl }}
-        onMessage={onMessage}
-        originWhitelist={['*']}
-        javaScriptEnabled
-        setSupportMultipleWindows={false}
-        onShouldStartLoadWithRequest={(req) =>
-          req.url.startsWith(config.turnstileBaseUrl) || ALLOWED_PREFIXES.some((p) => req.url.startsWith(p))
-        }
-        style={{ backgroundColor: 'transparent' }}
-        scrollEnabled={false}
-      />
-      <Text variant="caption" tone="secondary" className="text-center">
-        {id.auth.captchaHint}
-      </Text>
+    <View testID={testID} className="gap-2">
+      <View className="flex-row items-center gap-2 px-1">
+        <Icon name={status === 'ready' ? 'verified-user' : 'shield'} size={18} color={status === 'ready' ? palette.success : palette.textSecondary} />
+        <Text variant="label" tone={status === 'ready' ? 'success' : 'secondary'}>
+          {status === 'ready' ? t.captchaDone : t.captchaLabel}
+        </Text>
+      </View>
+      <View
+        className="overflow-hidden rounded-tile border-[1.5px] border-separator"
+        style={{ height: WIDGET_HEIGHT, borderCurve: 'continuous' }}
+        accessibilityLabel={t.captchaLabel}
+      >
+        <WebView
+          source={{ uri: captchaPageUrl(siteKey, action) }}
+          onMessage={onMessage}
+          originWhitelist={['https://*', 'about:*']}
+          javaScriptEnabled
+          // The page needs no storage; keep the WebView stateless.
+          incognito
+          setSupportMultipleWindows={false}
+          onShouldStartLoadWithRequest={(req) => {
+            const fallbackToken = tokenFromCaptchaUrl(req.url);
+            if (fallbackToken) {
+              onToken(fallbackToken);
+              return false;
+            }
+            return isAllowedCaptchaNavigation(req.url, config.turnstileBaseUrl);
+          }}
+          onError={() => onError('load_failed')}
+          onHttpError={() => onError('load_failed')}
+          scrollEnabled={false}
+          style={{ backgroundColor: 'transparent' }}
+        />
+      </View>
+      {status === 'error' ? (
+        <View className="gap-1">
+          <Text variant="caption" tone="danger" accessibilityLiveRegion="polite">
+            {t.captchaFailed}
+          </Text>
+          <Button title={t.captchaRetry} variant="ghost" icon="refresh" onPress={onRetry} className="self-start" />
+        </View>
+      ) : null}
     </View>
   );
 }

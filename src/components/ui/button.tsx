@@ -100,8 +100,9 @@ export function Button({
         style={{ boxShadow: inactive ? undefined : glow[variant] }}
         // Caller classes/styles position the button; the touch target is mode-dependent
         // (48/56 adult, 56/64 child) — a runtime value.
+        minHeight={touch[size]}
         containerClassName={className}
-        containerStyle={[{ minHeight: touch[size] }, style]}
+        containerStyle={style}
       >
         {/* Label stays visible while loading so the action remains readable. */}
         <View className="flex-row items-center gap-2">

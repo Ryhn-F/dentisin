@@ -45,7 +45,7 @@ export function ChildSwitcher({
               'flex-row items-center gap-2 rounded-full border-2 py-1 pl-1 pr-4',
               selected ? 'border-primary bg-primary' : 'border-separator bg-card',
             )}
-            containerStyle={{ minHeight: touch.regular }}
+            minHeight={touch.regular}
           >
             <View className={cn('size-9 items-center justify-center rounded-full', avatar[i % avatar.length])}>
               <Text variant="headline" style={{ color: palette.text }}>

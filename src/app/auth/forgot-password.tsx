@@ -11,12 +11,12 @@ import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { requestPasswordReset } from '@/core/auth/auth-service';
 import { useSession } from '@/core/auth/session-store';
+import { useCaptcha } from '@/core/auth/use-captcha';
 import { isEmail } from '@/core/auth/validation';
-import { config, isSupabaseConfigured } from '@/core/config';
+import { isSupabaseConfigured } from '@/core/config';
 import { id } from '@/core/i18n/id';
 
 const t = id.auth;
-const captchaRequired = Boolean(config.turnstileSiteKey) && process.env.EXPO_OS !== 'web';
 
 // Used from Login ("Lupa kata sandi?") and from Account settings ("Ubah kata sandi").
 // backend config.toml has secure_password_change = true, so in-app changes go through
@@ -29,20 +29,17 @@ export default function ForgotPassword() {
   const [formError, setFormError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [captcha, setCaptcha] = useState<string | null>(null);
-  const [captchaKey, setCaptchaKey] = useState(0);
+  const captcha = useCaptcha('reset');
 
   async function onSubmit() {
     setFormError(null);
     if (!email.trim()) return setError(t.fieldErrors.emailRequired);
     if (!isEmail(email)) return setError(t.fieldErrors.emailInvalid);
     setError(null);
-    if (captchaRequired && !captcha) return setFormError(t.fieldErrors.captchaRequired);
     setBusy(true);
-    const result = await requestPasswordReset(email, captcha ?? undefined);
+    const result = await requestPasswordReset(email, await captcha.take());
     setBusy(false);
-    setCaptcha(null);
-    setCaptchaKey((k) => k + 1);
+    captcha.reset(); // tokens are single-use
     // Same message whether or not the email exists (no account enumeration).
     if (result.ok) setSent(true);
     else setFormError(result.message);
@@ -61,7 +58,10 @@ export default function ForgotPassword() {
       <TextField
         label={t.email}
         value={email}
-        onChangeText={setEmail}
+        onChangeText={(v) => {
+          setEmail(v);
+          if (error) setError(null);
+        }}
         error={error}
         placeholder={t.emailPlaceholder}
         keyboardType="email-address"
@@ -69,10 +69,12 @@ export default function ForgotPassword() {
         autoCorrect={false}
         autoComplete="email"
         editable={!signedIn}
+        returnKeyType="send"
+        onSubmitEditing={onSubmit}
       />
       {sent ? <Banner tone="success" message={t.forgot.sent} /> : null}
       {formError ? <Banner tone="error" message={formError} /> : null}
-      <Turnstile key={captchaKey} onToken={setCaptcha} />
+      <Turnstile key={captcha.widgetKey} status={captcha.status} onRetry={captcha.reset} {...captcha.widgetProps} />
       <Button title={t.forgot.submit} size="large" loading={busy} disabled={!isSupabaseConfigured} onPress={onSubmit} />
     </Screen>
   );

@@ -30,6 +30,11 @@ export const palette = {
   ripple: 'rgba(28, 30, 79, 0.10)',
   // Translucent white for decorations on blue (never for text that must pass AA).
   onPrimarySoft: 'rgba(255, 255, 255, 0.82)',
+  // Camera screens: dark veils over the live preview. Text/icons on them are white on a
+  // solid-enough backing (pills use scrimStrong) because the preview behind is unknown.
+  scrim: 'rgba(12, 14, 40, 0.58)',
+  scrimStrong: 'rgba(12, 14, 40, 0.86)',
+  cameraBg: '#000000',
   tints: {
     lavender: '#E3E8FF',
     sky: '#DCEAFF',
@@ -83,6 +88,8 @@ export const contrastPairs: readonly ContrastPair[] = [
   { name: 'onPrimary on primaryDeep', fg: p.onPrimary, bg: p.primaryDeep },
   { name: 'onAccent on accent', fg: p.onAccent, bg: p.accent },
   { name: 'onCoral on coral', fg: p.onCoral, bg: p.coral },
+  // Step-number badges (white on navy).
+  { name: 'onPrimary on text', fg: p.onPrimary, bg: p.text },
   ...triageLevels.map((level) => ({
     name: `level ${level}`,
     fg: levelColors[level].on,

@@ -11,8 +11,10 @@ import { Screen } from '@/components/screen';
 import { SegmentedControl } from '@/components/segmented-control';
 import { StreakWeek } from '@/components/streak';
 import { Text } from '@/components/ui/text';
+import { flags } from '@/core/flags';
 import { id } from '@/core/i18n/id';
-import type { BrushingRecord } from '@/domain/models';
+import type { BrushingRecord, ScreeningRecord } from '@/domain/models';
+import { levelLook } from '@/features/screening/level-look';
 import { useMockData } from '@/mock/store';
 import { currentWeek, localDateKey } from '@/mock/streak';
 import { formatClock, formatDateTime, formatMonthYear } from '@/ui/format';
@@ -25,6 +27,12 @@ const MAX_ROWS = 60;
 
 function slotLabel(slot: BrushingRecord['slot']) {
   return slot === 'morning' ? t.slotMorning : slot === 'evening' ? t.slotEvening : t.slotOther;
+}
+
+function screeningPhotoLabel(r: ScreeningRecord) {
+  if (r.photoStatus === 'assessed') return t.screeningPhoto.assessed;
+  if (r.photoStatus === 'quality_failed') return t.screeningPhoto.quality_failed;
+  return r.photoTaken ? t.screeningPhoto.notAssessed : t.screeningPhoto.not_taken;
 }
 
 function groupByMonth(records: BrushingRecord[]) {
@@ -44,6 +52,8 @@ export default function History() {
   const activeId = useMockData((s) => s.activeChildId);
   const setActive = useMockData((s) => s.setActiveChild);
   const all = useMockData((s) => s.brushing);
+  const allScreenings = useMockData((s) => s.screenings);
+  const screenings = allScreenings.filter((r) => r.childId === activeId);
 
   const records = all
     .filter((r) => r.childId === activeId)
@@ -105,7 +115,31 @@ export default function History() {
             ))
           )
         ) : segment === 'screening' ? (
-          <EmptyState mascot="thinking" title={t.emptyScreeningTitle} message={t.emptyScreeningBody} />
+          screenings.length === 0 ? (
+            <EmptyState
+              mascot="thinking"
+              title={t.emptyScreeningTitle}
+              message={flags.medical_modules ? t.emptyScreeningBodyActive : t.emptyScreeningBody}
+              action={{
+                label: flags.medical_modules ? t.emptyScreeningActionActive : t.emptyScreeningAction,
+                onPress: () => router.navigate('/screening'),
+              }}
+            />
+          ) : (
+            <ListGroup title={t.segmentScreening}>
+              {screenings.map((r) => (
+                <ListRow
+                  key={r.id}
+                  testID={`screening-row-${r.id}`}
+                  icon={levelLook[r.level].icon}
+                  iconTone={levelLook[r.level].tone}
+                  title={id.levels[r.level].label}
+                  subtitle={`${formatDateTime(r.screenedAt)} · ${screeningPhotoLabel(r)}`}
+                  onPress={() => router.push(`/history/${r.id}`)}
+                />
+              ))}
+            </ListGroup>
+          )
         ) : (
           <EmptyState icon="description" title={t.emptyReferralTitle} message={t.emptyReferralBody} />
         )}

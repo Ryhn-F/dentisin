@@ -126,7 +126,7 @@ export function ListRow({
       scaleTo={1}
       android_ripple={{ color: palette.ripple }}
       className={rowClass}
-      containerStyle={rowStyle}
+      minHeight={rowStyle.minHeight}
     >
       {content}
     </PressableScale>

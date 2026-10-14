@@ -40,7 +40,7 @@ export function Chip({
         'flex-row items-center gap-1.5 rounded-full border-2 px-4',
         selected ? 'border-primary bg-primary' : 'border-separator bg-card',
       )}
-      containerStyle={{ minHeight: VISUAL_HEIGHT }}
+      minHeight={VISUAL_HEIGHT}
     >
       {icon ? <Icon name={icon} size={18} color={fg} /> : null}
       <Text variant="label" tone={selected ? 'onPrimary' : 'default'}>

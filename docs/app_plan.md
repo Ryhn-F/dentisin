@@ -87,7 +87,7 @@ src/app/
     register.tsx
     forgot-password.tsx
     callback.tsx              deep link dentisai://auth/callback (confirm / reset)
-  (tabs)/_layout.tsx          Native bottom tabs: Beranda · Fitur · Riwayat · Profil
+  (tabs)/_layout.tsx          JS bottom tabs: Beranda · Fitur · Skrining (raised center) · Riwayat · Profil
     home.tsx
     features.tsx
     history/index.tsx
@@ -102,7 +102,7 @@ src/app/
   features/education/[slug].tsx
   features/screening/...      behind medical_modules (not built in this plan)
 ```
-Tabs = 4 destinations with icon + label (child-friendly, always visible). Account settings is a stack screen under Profil, not a tab.
+Tabs = 5 destinations with icon + label (child-friendly, always visible); **Skrining sits in the middle as a raised round button** (main feature, 2026-10-10). While `medical_modules` is off, the Skrining tab explains how screening will work ("Segera hadir") and offers brushing / "Kapan ke dokter gigi?". Account settings is a stack screen under Profil, not a tab.
 
 ---
 
@@ -239,3 +239,5 @@ Still open:
 | 3 Auth | Supabase email+password (PKCE), register with password checklist, check-email + resend (60 s cooldown), forgot/change password via email link, deep-link callback (code or tokens; recovery → reset screen), no-account mode, Turnstile WebView, SecureStore chunked session, offline-tolerant hydrate | **Not tested against a real Supabase project** (no keys / SMTP / Turnstile yet) and **not run on an Android device**; Turnstile is a stub on web |
 
 Before phase 3 can be called verified end-to-end: fill `app/.env.local`, finish the backend README owner TODOs (Resend SMTP, callback page, Turnstile keys, redirect URLs), then on an Android dev build run sign-up → email link → home, sign-in, wrong password, unconfirmed email, forgot password → reset, sign-out, and an airplane-mode cold start with an expired token.
+
+**Screening flow (2026-10-11, ADR 016 Proposed).** `src/app/screening/*` + `src/features/screening/*`: red-flag questions → symptoms + pain → photo guide → camera (`expo-camera`, 3:4 preview, torch, 3 s countdown, crop to mouth) → on-device quality gate (`src/ml/quality-gate.ts`, parity with the 12 backend vectors) → TS triage (`src/domain/triage`, 114/114 backend cases, 100% engine coverage) → result + offline referral letter; saved to History without the photo (consent (a)). Behind `medical_modules` (on in internal builds only). No detector ships yet → the photo is reported as not assessed, never faked. Bundled rules sync: `node scripts/sync-backend-assets.js` (test fails when stale). Open: outbox event `screening_recorded`, PDF export, live (pre-capture) quality feedback after spike S2, real-phone latency/orientation check.

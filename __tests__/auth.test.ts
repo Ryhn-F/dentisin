@@ -10,8 +10,8 @@ describe('password rules (mirror backend config.toml)', () => {
     ['gigisehat2026', false], // no upper
     ['GIGISEHAT2026', false], // no lower
     ['GigiSehatAnak', false], // no digit
-    ['Gigi12345', false], // 9 chars
-    ['Gigi123456', true], // exactly 10
+    ['Gigi123', false], // 7 chars
+    ['Gigi1234', true], // exactly 8 (backend minimum_password_length = 8)
   ])('%s -> %s', (pw, ok) => {
     expect(isPasswordValid(pw)).toBe(ok);
   });
