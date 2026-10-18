@@ -79,7 +79,7 @@ describe('ResultDetails', () => {
   const advice = ['ADV_RETAKE_OR_VISIT', 'ADV_DENTIST_SCHEDULED', 'ADV_DISCLAIMER_NOT_DIAGNOSIS', 'ADV_REFERRAL_CTA'];
   const text = (adviceId: string) => triageRules.advice.find((a) => a.id === adviceId)!.text;
 
-  it('always shows level, reasons, advice, disclaimer, referral CTA and the DRAFT notice', async () => {
+  it('always shows level, reasons, advice, disclaimer and referral CTA', async () => {
     const onReferral = jest.fn();
     await render(
       <ResultDetails level="scheduled" reasons={reasons} adviceIds={advice} rulesVersion="0.2.0-draft" onReferral={onReferral} />,
@@ -89,7 +89,6 @@ describe('ResultDetails', () => {
     expect(screen.getByText(text('ADV_RETAKE_OR_VISIT'))).toBeOnTheScreen();
     expect(screen.getByTestId('result-disclaimer')).toHaveTextContent(id.common.disclaimer);
     expect(screen.getByText(text('ADV_REFERRAL_CTA'))).toBeOnTheScreen();
-    expect(screen.getByTestId('screening-draft-notice')).toBeOnTheScreen();
     expect(screen.queryByTestId('emergency-card')).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: s.result.referralAction }));
     expect(onReferral).toHaveBeenCalled();

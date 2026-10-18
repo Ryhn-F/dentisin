@@ -3,6 +3,8 @@
 import { encode } from 'jpeg-js';
 
 import { resolveMedicalModules } from '@/core/flags';
+import { useLocalData } from '@/data/local-store';
+import type { ChildProfile } from '@/domain/models';
 import { triageRules, type Answer } from '@/domain/triage';
 import {
   ageInMonths,
@@ -19,7 +21,6 @@ import { useScreeningSession } from '@/features/screening/session-store';
 import { nullDetector, type Detection, type Detector } from '@/ml/detector';
 import { base64ToBytes, choosePictureSize, decodeJpeg, fitLongestSide, frameToCrop } from '@/ml/photo';
 import type { QualityResult } from '@/ml/quality-gate';
-import { useMockData } from '@/mock/store';
 
 jest.mock('expo-image-manipulator', () => ({ ImageManipulator: {}, SaveFormat: { JPEG: 'jpeg' } }));
 jest.mock('expo-file-system', () => ({ File: jest.fn() }));
@@ -118,7 +119,15 @@ describe('pipeline', () => {
 });
 
 describe('session store', () => {
-  const child = useMockData.getState().kids[0];
+  // The local store starts empty (no seed data): add the child under test.
+  const child: ChildProfile = {
+    id: 'c0c0c0c0-0000-4000-8000-0000000000a1',
+    nickname: 'Uji',
+    birthYear: 2018,
+    birthMonth: 3,
+    allergies: [],
+  };
+  useLocalData.getState().upsertChild(child);
   const passed: QualityResult = {
     passed: true,
     reasons: [],
@@ -133,8 +142,8 @@ describe('session store', () => {
   }
 
   beforeEach(() => {
-    useMockData.setState({ screenings: [] });
-    useMockData.getState().setConsent(child.id, 'a', true);
+    useLocalData.setState({ screenings: [] });
+    useLocalData.getState().setConsent(child.id, 'a', true);
     useScreeningSession.getState().reset();
   });
 
@@ -149,7 +158,7 @@ describe('session store', () => {
     expect(outcome.output.advice_ids).toEqual(expect.arrayContaining(['ADV_DISCLAIMER_NOT_DIAGNOSIS', 'ADV_REFERRAL_CTA']));
     const s = useScreeningSession.getState();
     expect(s.saveState).toBe('saved');
-    const [record] = useMockData.getState().screenings;
+    const [record] = useLocalData.getState().screenings;
     expect(record).toMatchObject({ childId: child.id, level: 'scheduled', photoTaken: false, photoStatus: 'not_taken', findings: [] });
     expect(JSON.stringify(record)).not.toMatch(/file:|uri/);
   });
@@ -164,7 +173,7 @@ describe('session store', () => {
     const after = useScreeningSession.getState();
     expect(after.analysis).toEqual({ photoStatus: 'not_taken', detections: [], detectorAvailable: false });
     expect(after.pixels).toBeNull();
-    expect(useMockData.getState().screenings[0]).toMatchObject({ photoTaken: true, modelVersion: null });
+    expect(useLocalData.getState().screenings[0]).toMatchObject({ photoTaken: true, modelVersion: null });
   });
 
   it('a red flag after step 1 is an emergency; unasked questions stay out of the record', async () => {
@@ -177,7 +186,7 @@ describe('session store', () => {
       expect(outcome.output.reasons.map((r) => r.id)).not.toContain('SYM_WHITE_SPOT');
       expect(outcome.output.reasons.map((r) => r.id)).not.toContain('PAIN_UNKNOWN');
     }
-    const [record] = useMockData.getState().screenings;
+    const [record] = useLocalData.getState().screenings;
     expect(record.redFlag).toBe(true);
     expect(record.pain).toBeNull();
     expect(record.answers.white_spot).toBeUndefined();
@@ -192,7 +201,7 @@ describe('session store', () => {
   });
 
   it('does not save without consent (a) or without a child', async () => {
-    useMockData.getState().setConsent(child.id, 'a', false);
+    useLocalData.getState().setConsent(child.id, 'a', false);
     useScreeningSession.getState().start(child);
     answerAll(allNo(), 0);
     await useScreeningSession.getState().finish('skip');
@@ -202,7 +211,7 @@ describe('session store', () => {
     answerAll(allNo(), 0);
     await useScreeningSession.getState().finish('skip');
     expect(useScreeningSession.getState().saveState).toBe('no_child');
-    expect(useMockData.getState().screenings).toHaveLength(0);
+    expect(useLocalData.getState().screenings).toHaveLength(0);
   });
 
   it('counts attempts, discards captures and resets', () => {

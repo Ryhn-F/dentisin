@@ -11,7 +11,7 @@ import { id } from '@/core/i18n/id';
 import { levelColors, palette, useTheme, type TriageLevel } from '@/core/theme';
 import { adviceText, triageRules } from '@/domain/triage';
 
-import { DraftNotice } from './draft-notice';
+
 import { PhotoWithFindings, type Finding } from './photo-findings';
 
 const t = id.screening.result;
@@ -121,7 +121,7 @@ export function ResultDetails({
     <View className="gap-6">
       <LevelBadge level={level} />
       {emergency ? <EmergencyCard adviceIds={adviceIds} /> : null}
-      <DraftNotice />
+
 
       {photo ? (
         <View className="gap-3">

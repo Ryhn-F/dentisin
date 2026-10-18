@@ -6,7 +6,7 @@ import { Screen } from '@/components/screen';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
 import { id } from '@/core/i18n/id';
-import { DraftNotice } from '@/features/screening/components/draft-notice';
+
 import { FlowProgress } from '@/features/screening/components/flow-progress';
 import { QuestionCard } from '@/features/screening/components/question-card';
 import { isEmergencyAlready, redFlagQuestions } from '@/features/screening/pipeline';
@@ -48,7 +48,7 @@ export default function RedFlagQuestions() {
           {t.adultNote}
         </Text>
       </View>
-      <DraftNotice />
+
       <View className="gap-4">
         {redFlagQuestions.map((q, i) => (
           <QuestionCard

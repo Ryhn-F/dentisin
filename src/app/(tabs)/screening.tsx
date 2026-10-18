@@ -1,4 +1,5 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 
 import { Banner } from '@/components/banner';
@@ -12,15 +13,18 @@ import { Mascot } from '@/components/mascot';
 import { Screen } from '@/components/screen';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
+import { useAccountType, useMe } from '@/core/account/account-store';
 import { flags } from '@/core/flags';
 import { id } from '@/core/i18n/id';
 import { palette } from '@/core/theme';
-import { DraftNotice } from '@/features/screening/components/draft-notice';
+import { useLocalData } from '@/data/local-store';
+
 import { ageInMonths } from '@/features/screening/pipeline';
 import { useScreeningSession } from '@/features/screening/session-store';
-import { useMockData } from '@/mock/store';
+import { childLabels, resolveRequestTarget, teenSelfProfile } from '@/features/screening/subject';
 
 const t = id.screening;
+const ts = id.screeningSync;
 const stepLook: { icon: IconName; tone: IconTileTone }[] = [
   { icon: 'question-answer', tone: 'blue' },
   { icon: 'flashlight-on', tone: 'sun' },
@@ -138,18 +142,64 @@ function ComingSoon() {
   );
 }
 
+type StartParams = { child?: string | string[]; request?: string | string[] };
+
 // Start of the flow: questionnaire -> red flags -> photo -> quality gate -> triage.
+// Teen accounts screen their self profile only (no switcher, no "add child"). Guardians pick a
+// local child; opened from a child's request (`/screening?child&request`) that child is
+// preselected and the request id travels into the record (screening_recorded.request_id).
 function StartScreening() {
-  const kids = useMockData((s) => s.kids);
-  const activeId = useMockData((s) => s.activeChildId);
-  const setActive = useMockData((s) => s.setActiveChild);
+  const params = useLocalSearchParams<StartParams>();
+  const isTeen = useAccountType() === 'teen';
+  const me = useMe();
+  const kids = useLocalData((s) => s.kids);
+  const activeId = useLocalData((s) => s.activeChildId);
+  const screenings = useLocalData((s) => s.screenings);
+  const setActive = useLocalData((s) => s.setActiveChild);
   const start = useScreeningSession((s) => s.start);
-  const child = kids.find((k) => k.id === activeId) ?? null;
+
+  const target = isTeen ? ({ kind: 'none' } as const) : resolveRequestTarget(params, kids, screenings);
+  const targetChild = target.kind === 'ok' ? target.childId : null;
+  const targetRequest = target.kind === 'ok' ? target.requestId : null;
+  // Preselect the request's child once per request; the parent may still switch afterwards.
+  useEffect(() => {
+    if (targetChild && targetRequest) setActive(targetChild);
+  }, [targetChild, targetRequest, setActive]);
+
+  const labels = useMemo(() => childLabels(kids, ts.childFallback), [kids]);
+  const options = useMemo(() => kids.map((k) => ({ id: k.id, nickname: labels.get(k.id) ?? '' })), [kids, labels]);
+  const child = isTeen ? teenSelfProfile(kids, me) : (kids.find((k) => k.id === activeId) ?? kids[0] ?? null);
+  const childName = child ? (labels.get(child.id) ?? '') : '';
   const ageKnown = child ? ageInMonths(child.birthYear, child.birthMonth) !== null : false;
+  // Only for the request's own child: switching to another child screens without it.
+  const requestId = target.kind === 'ok' && child?.id === target.childId ? target.requestId : null;
+  const clearRequest = () => router.setParams({ child: undefined, request: undefined });
 
   return (
     <>
-      <DraftNotice />
+
+      {requestId ? (
+        <Banner
+          testID="screening-request-banner"
+          tone="info"
+          icon="assignment"
+          title={ts.request.title(childName)}
+          message={ts.request.body}
+          action={
+            <Button
+              title={ts.request.clear}
+              variant="ghost"
+              icon="close"
+              className="self-start"
+              accessibilityHint={ts.request.clearHint}
+              onPress={clearRequest}
+            />
+          }
+        />
+      ) : null}
+      {target.kind === 'missing_child' ? (
+        <Banner testID="screening-request-missing" tone="warning" message={ts.request.childMissing} />
+      ) : null}
       <Card className="gap-4 p-6">
         <View className="flex-row items-center gap-3">
           <IconTile name="photo-camera" tone="blue" size={44} />
@@ -160,12 +210,20 @@ function StartScreening() {
             </Text>
           </View>
         </View>
-        {kids.length ? (
+        {isTeen ? (
+          child ? (
+            <Text variant="label" tone="secondary">
+              {ts.teen.subject}
+            </Text>
+          ) : (
+            <Banner tone="info" title={ts.teen.noSelfTitle} message={ts.teen.noSelfBody} />
+          )
+        ) : kids.length ? (
           <View className="gap-2">
             <Text variant="label" tone="secondary">
               {t.chooseChild}
             </Text>
-            <ChildSwitcher kids={kids} activeId={activeId} onChange={setActive} />
+            <ChildSwitcher kids={options} activeId={activeId} onChange={setActive} />
           </View>
         ) : (
           <Banner
@@ -183,20 +241,20 @@ function StartScreening() {
             }
           />
         )}
-        {child && !ageKnown ? <Banner tone="warning" message={t.ageUnknown} /> : null}
+        {child && !ageKnown ? <Banner tone="warning" message={isTeen ? ts.teen.ageUnknown : t.ageUnknown} /> : null}
         <Button
           testID="screening-start"
-          title={child ? t.startFor(child.nickname) : t.startAction}
+          title={child && !isTeen ? t.startFor(childName) : t.startAction}
           icon="play-arrow"
           variant="accent"
           size="large"
           onPress={() => {
-            start(child);
+            start(child, undefined, { requestId });
             router.push('/screening/questions');
           }}
         />
         <Text variant="caption" tone="secondary" className="text-center">
-          {t.adultNote}
+          {isTeen ? ts.teen.note : t.adultNote}
         </Text>
       </Card>
       <HowItWorks />
