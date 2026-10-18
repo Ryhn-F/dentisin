@@ -100,14 +100,14 @@ function SentOnlyBanner({ eventId, requestId }: { eventId: string; requestId: st
   );
 }
 
-function photoNoteFor(choice: PhotoChoice | null, detectorAvailable: boolean): PhotoNote | null {
+function photoNoteFor(choice: PhotoChoice | null): PhotoNote | null {
   switch (choice) {
-    case 'use':
-      return detectorAvailable ? null : { tone: 'info', title: t.noDetectorTitle, message: t.noDetectorBody };
     case 'skip':
       return { tone: 'info', message: t.photoSkipped };
     case 'quality_failed':
       return { tone: 'warning', message: t.photoFailed };
+    case 'not_sent':
+      return { tone: 'info', message: t.photoNotSent };
     case 'red_flag':
       return { tone: 'info', message: t.redFlagNoPhoto };
     default:
@@ -128,7 +128,6 @@ export default function Result() {
   const record = useScreeningSession((s) => s.record);
   const sentEventId = useScreeningSession((s) => s.sentEventId);
   const requestId = useScreeningSession((s) => s.requestId);
-  const triageSource = useScreeningSession((s) => s.triageSource);
   const leaving = useRef(false);
 
   const done = useCallback(() => {
@@ -187,14 +186,9 @@ export default function Result() {
         rulesVersion={output.rules_version}
         photo={showPhoto ? capture : null}
         findings={findings}
-        photoNote={photoNoteFor(photoChoice, analysis?.detectorAvailable ?? false)}
+        photoNote={photoNoteFor(photoChoice)}
         onReferral={() => router.push('/screening/referral')}
       />
-      {triageSource ? (
-        <Text testID={`triage-source-${triageSource}`} variant="caption" tone="secondary" className="px-1">
-          {triageSource === 'server' ? ts.source.server : ts.source.device}
-        </Text>
-      ) : null}
       {saveState === 'saved' && record ? (
         <SavedBanner recordId={record.id} requestId={record.requestId} />
       ) : saveState === 'sent_only' && sentEventId ? (

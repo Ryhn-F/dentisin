@@ -1,7 +1,6 @@
-// Online re-check of a finished screening against the DentisAI API (ADR 019). The device always
-// evaluates first (offline-first); the server is asked only when it could change something and
-// the family agreed to send data. Pure decisions live here so they are testable.
-import type { EvaluateResult, ServerEvaluation } from '@/core/api/screening-api';
+// When the screening may use the DentisAI API, and how its answer becomes the result
+// (ADR 019/020). Pure decisions live here so they are testable.
+import type { EvaluateResult } from '@/core/api/screening-api';
 import { triageRules, type TriageOutput } from '@/domain/triage';
 
 export type TriageSource = 'server' | 'device';
@@ -9,37 +8,29 @@ export type TriageSource = 'server' | 'device';
 const rankOf = new Map(triageRules.levels.map((l) => [l.id, l.rank]));
 const topRank = Math.max(...triageRules.levels.map((l) => l.rank));
 
-export type AskServerArgs = {
+export type ServerAccess = {
   apiConfigured: boolean;
   signedIn: boolean;
   isChildAccount: boolean;
-  /** Local consent (b) "kirim data teknis" for the screened child (or the teen's self profile). */
+  /** Local consent (b) "kirim data" for the screened child (or the teen's self profile). */
   consentB: boolean;
-  redFlagShortCircuit: boolean;
-  localLevel: string;
 };
 
 /**
- * Ask the server only when: the API is configured; a signed-in parent/teen (the API takes the
- * user's Supabase JWT; child accounts have no access and never screen); consent (b) covers sending
- * screening data; and the device result is not already the top level. A red flag or an emergency
- * cannot go higher, so it never waits for the network (red flag wins, offline).
+ * The API takes the user's Supabase JWT: a signed-in parent/teen (child accounts have no access
+ * and never screen), with consent (b) covering sending the photo and answers (ADR 020).
  */
-export function shouldAskServer(a: AskServerArgs): boolean {
-  if (!a.apiConfigured || !a.signedIn || a.isChildAccount || !a.consentB) return false;
-  if (a.redFlagShortCircuit) return false;
-  return (rankOf.get(a.localLevel) ?? topRank) < topRank;
+export function canUseServer(a: ServerAccess): boolean {
+  return a.apiConfigured && a.signedIn && !a.isChildAccount && a.consentB;
 }
 
 /**
- * Same rules on both sides, so the levels normally match. If they ever differ (rules drift), the
- * more urgent one is shown: a re-check may raise a level, never lower it. On a tie the server's
- * output is used (reference engine).
+ * Screenings without a photo go to /v1/screening/evaluate. A red flag or an emergency cannot go
+ * higher, so it never waits for the network (red flag wins, offline).
  */
-export function chooseOutput(local: TriageOutput, server: ServerEvaluation): { output: TriageOutput; source: TriageSource } {
-  const localRank = rankOf.get(local.level) ?? topRank;
-  const serverRank = rankOf.get(server.output.level) ?? -1;
-  return serverRank >= localRank ? { output: server.output, source: 'server' } : { output: local, source: 'device' };
+export function shouldEvaluateOnServer(a: ServerAccess & { redFlagShortCircuit: boolean; localLevel: string }): boolean {
+  if (!canUseServer(a) || a.redFlagShortCircuit) return false;
+  return (rankOf.get(a.localLevel) ?? topRank) < topRank;
 }
 
 export type ServerDecision =
@@ -47,8 +38,9 @@ export type ServerDecision =
   /** API.md §4: an engine rejection never shows a level; the app shows the safe referral screen. */
   | { kind: 'fail_safe'; code: string };
 
+/** The server's answer is the result; without one (offline, 5xx...) the device result stands. */
 export function applyServerResult(local: TriageOutput, result: EvaluateResult): ServerDecision {
-  if (result.kind === 'ok') return { kind: 'result', ...chooseOutput(local, result.evaluation) };
+  if (result.kind === 'ok') return { kind: 'result', output: result.evaluation.output, source: 'server' };
   if (result.kind === 'fail_safe') return { kind: 'fail_safe', code: `server_${result.code}` };
   return { kind: 'result', output: local, source: 'device' };
 }

@@ -2,13 +2,14 @@
 // payload mapping (level, red_flag, findings), referral_created recorded once behind the
 // screening event, the teen subject, and the result-screen sync state.
 import { useAccount } from '@/core/account/account-store';
+import type { PhotoRequest, PhotoResult } from '@/core/api/screening-api';
 import { setStorageBackendForTests, type KeyValueBackend } from '@/core/auth/secure-storage';
 import { useSession } from '@/core/auth/session-store';
 import { installSyncBridge, syncRefs } from '@/core/sync/bridge';
 import { outbox } from '@/core/sync/outbox';
 import { useLocalData } from '@/data/local-store';
 import { DEFAULT_LIMITS, type ChildProfile, type MyAccount } from '@/domain/models';
-import { triageRules, type Answer } from '@/domain/triage';
+import { evaluate, triageParams, triageRules, type Answer } from '@/domain/triage';
 import type { Detection } from '@/ml/detector';
 import type { QualityResult } from '@/ml/quality-gate';
 import { redFlagQuestions } from '@/features/screening/pipeline';
@@ -26,17 +27,32 @@ jest.mock('@/core/auth/supabase', () => ({
   },
 }));
 
+// The server detector (POST /v1/screening/photo) answers with these findings; null = offline.
 const mockDetections: { current: Detection[] | null } = { current: null };
-jest.mock('@/ml/detector', () => {
-  const actual = jest.requireActual('@/ml/detector');
+jest.mock('@/core/config', () => ({ ...jest.requireActual('@/core/config'), isApiConfigured: true }));
+jest.mock('@/core/api/screening-api', () => ({
+  ...jest.requireActual('@/core/api/screening-api'),
+  screenPhoto: (req: PhotoRequest) => mockScreenPhoto(req),
+}));
+async function mockScreenPhoto(req: PhotoRequest): Promise<PhotoResult> {
+  const detections = mockDetections.current;
+  if (!detections) return { kind: 'unavailable', reason: 'network' };
+  const output = evaluate(
+    triageRules,
+    {
+      detections: detections.map((d) => ({ class: d.class, confidence: d.confidence })),
+      photo_status: 'assessed',
+      symptoms: req.symptoms,
+      age_months: req.ageMonths,
+      pain: req.pain,
+    },
+    triageParams,
+  );
   return {
-    ...actual,
-    getDetector: () =>
-      mockDetections.current
-        ? { available: true, name: 'fake', modelVersion: '1.0.0', detect: async () => mockDetections.current }
-        : actual.nullDetector,
+    kind: 'ok',
+    screening: { output, rulesStatus: 'draft', clinicallyValidated: false, photoStatus: 'assessed', detections, modelVersion: '1.0.0' },
   };
-});
+}
 
 const GUARDIAN = '0b0b0b0b-0000-4000-8000-000000000001';
 const TEEN = '0b0b0b0b-0000-4000-8000-000000000002';
@@ -74,6 +90,7 @@ const legacy = account({ capabilities: { createChildAccounts: false, registerPro
 const kid = (id = CHILD, nickname = 'Adik'): ChildProfile => ({ id, nickname, birthYear: 2018, birthMonth: 3, allergies: [] });
 const allNo = (): Record<string, Answer> => Object.fromEntries(triageRules.questions.map((q) => [q.id, 'no']));
 const pixels = { width: 4, height: 4, channels: 3 as const, data: new Uint8Array(48) };
+const upload = { base64: 'AAAA', width: 4, height: 4 };
 const passed: QualityResult = { passed: true, reasons: [], metrics: {} as QualityResult['metrics'], config_status: 'PLACEHOLDER' };
 
 const l = () => useLocalData.getState();
@@ -102,7 +119,7 @@ async function screen(opts: { requestId?: string | null; answers?: Record<string
   const answers = opts.answers ?? allNo();
   for (const [qid, a] of Object.entries(answers)) session().setAnswer(qid, a);
   if (opts.choice !== 'red_flag') session().setPain(0);
-  if (opts.choice === 'use') session().setCapture({ uri: 'mem://photo', width: 4, height: 4, pixels }, passed);
+  if (opts.choice === 'use') session().setCapture({ uri: 'mem://photo', width: 4, height: 4, pixels, upload }, passed);
   await session().finish(opts.choice ?? 'skip');
   const record = session().record;
   if (!record) throw new Error('screening not saved');

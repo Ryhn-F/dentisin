@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 
+import { Banner } from '@/components/banner';
 import { Card } from '@/components/card';
 import { Icon, type IconName } from '@/components/icon';
 import { IconTile, type IconTileTone } from '@/components/icon-tile';
@@ -12,7 +13,7 @@ import { id } from '@/core/i18n/id';
 import { palette } from '@/core/theme';
 import { FlowProgress } from '@/features/screening/components/flow-progress';
 import { MouthGuide } from '@/features/screening/components/mouth-guide';
-import { useScreeningSession } from '@/features/screening/session-store';
+import { useCanSendPhoto, useScreeningSession } from '@/features/screening/session-store';
 import { useEnsureSession } from '@/features/screening/use-ensure-session';
 
 const t = id.screening.guide;
@@ -26,11 +27,14 @@ const stepLook: { icon: IconName; tone: IconTileTone }[] = [
 
 // Step 3a: how to take a usable photo, before the camera opens. Only ~45% of parents' photos
 // were diagnostic in the AICaries trial (app/CLAUDE.md §6.2), so the guide is part of the feature.
+// The photo is assessed by the DentisAI API (ADR 020): without a signed-in parent/teen and
+// consent (b) the camera is not offered, only the questionnaire result.
 export default function PhotoGuide() {
   useEnsureSession();
   const { width } = useWindowDimensions();
   const finish = useScreeningSession((s) => s.finish);
   const [busy, setBusy] = useState(false);
+  const canSendPhoto = useCanSendPhoto();
   const illustration = Math.min(width - 40 - 40, 360);
 
   async function skip() {
@@ -96,23 +100,36 @@ export default function PhotoGuide() {
         ))}
       </Card>
 
-      <View className="flex-row items-center gap-3 px-1">
-        <Icon name="lock" size={20} color={palette.success} />
-        <Text variant="caption" tone="secondary" className="flex-1">
-          {t.privacy}
-        </Text>
-      </View>
+      {canSendPhoto ? (
+        <View className="flex-row items-center gap-3 px-1">
+          <Icon name="lock" size={20} color={palette.success} />
+          <Text variant="caption" tone="secondary" className="flex-1">
+            {t.privacy}
+          </Text>
+        </View>
+      ) : (
+        <Banner testID="guide-needs-server" tone="info" title={t.needsServerTitle} message={t.needsServerBody} />
+      )}
 
       <View className="gap-2">
+        {canSendPhoto ? (
+          <Button
+            testID="guide-open-camera"
+            title={t.openCamera}
+            icon="photo-camera"
+            variant="accent"
+            size="large"
+            onPress={() => router.push('/screening/camera')}
+          />
+        ) : null}
         <Button
-          testID="guide-open-camera"
-          title={t.openCamera}
-          icon="photo-camera"
-          variant="accent"
-          size="large"
-          onPress={() => router.push('/screening/camera')}
+          testID="guide-skip-photo"
+          title={t.skipPhoto}
+          variant={canSendPhoto ? 'ghost' : 'accent'}
+          size={canSendPhoto ? 'regular' : 'large'}
+          loading={busy}
+          onPress={skip}
         />
-        <Button testID="guide-skip-photo" title={t.skipPhoto} variant="ghost" loading={busy} onPress={skip} />
         <Text variant="caption" tone="secondary" className="text-center">
           {t.skipHint}
         </Text>

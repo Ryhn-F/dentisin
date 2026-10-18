@@ -1,15 +1,21 @@
-// Client for the DentisAI ML/AI API screening re-check (backend/api/docs/API.md §5, ADR 019):
-// POST /v1/screening/evaluate runs the Python reference triage on the same input the device
-// already evaluated. The body is the triage engine input only — answers, pain, age in months and
-// on-device findings as {class, confidence}: never a photo, box, name or id. The API is stateless.
-// Never throws and never logs (inputs are health data).
+// Client for the DentisAI ML/AI API screening routes (backend/api/docs/API.md, ADR 019/020):
+// - POST /v1/screening/photo: the photo (base64 JPEG, metadata stripped) + answers, pain and age
+//   in months. The server runs its quality gate, the caries detector and the reference triage,
+//   and returns the result with the findings' boxes. The API never stores the photo.
+// - POST /v1/screening/evaluate: the triage engine input only (no photo), for screenings
+//   without a photo.
+// Never a name, child id or email. Never throws and never logs (inputs are health data).
 import { config } from '@/core/config';
 import { supabase } from '@/core/auth/supabase';
-import { triageRules, type TriageInput, type TriageOutput } from '@/domain/triage';
+import { triageRules, type PhotoStatus, type TriageInput, type TriageOutput } from '@/domain/triage';
+import type { Detection } from '@/ml/detector';
 
 export const EVALUATE_PATH = '/v1/screening/evaluate';
+export const PHOTO_PATH = '/v1/screening/photo';
 /** Rural signal is slow; past this the device result stands (offline-first). */
 export const EVALUATE_TIMEOUT_MS = 8000;
+/** Upload (~100 KB) + detector on a slow line. */
+export const PHOTO_TIMEOUT_MS = 30000;
 
 export type ServerEvaluation = {
   output: TriageOutput;
@@ -26,10 +32,25 @@ export type UnavailableReason =
   | 'rate_limited'
   | 'server'
   | 'network'
+  | 'timeout'
   | 'bad_response';
 
 export type EvaluateResult =
   | { kind: 'ok'; evaluation: ServerEvaluation }
+  /** The server engine rejected the input (422 + fail_safe): show the safe referral screen. */
+  | { kind: 'fail_safe'; code: string }
+  | { kind: 'unavailable'; reason: UnavailableReason };
+
+export type PhotoScreening = ServerEvaluation & {
+  /** `assessed` when the detector ran; `quality_failed` when the server's quality gate refused it. */
+  photoStatus: PhotoStatus;
+  /** Findings with boxes normalised to the sent photo ([0..1]); boxes are overlay only (ADR 014). */
+  detections: Detection[];
+  modelVersion: string | null;
+};
+
+export type PhotoResult =
+  | { kind: 'ok'; screening: PhotoScreening }
   /** The server engine rejected the input (422 + fail_safe): show the safe referral screen. */
   | { kind: 'fail_safe'; code: string }
   | { kind: 'unavailable'; reason: UnavailableReason };
@@ -128,12 +149,60 @@ function errorOf(body: unknown): { code: string | null; failSafe: boolean } {
   };
 }
 
-export async function evaluateScreening(input: TriageInput, deps: Deps = {}): Promise<EvaluateResult> {
+type Posted = { kind: 'response'; status: number; ok: boolean; body: unknown } | { kind: 'unavailable'; reason: UnavailableReason };
+
+async function postJson(path: string, payload: unknown, deps: Deps, defaultTimeout: number): Promise<Posted> {
   const baseUrl = deps.baseUrl === undefined ? config.apiBaseUrl : deps.baseUrl;
   if (!baseUrl) return { kind: 'unavailable', reason: 'not_configured' };
   const token = await (deps.getAccessToken ?? defaultAccessToken)();
   if (!token) return { kind: 'unavailable', reason: 'no_session' };
 
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, deps.timeoutMs ?? defaultTimeout);
+  let res: Response;
+  try {
+    res = await (deps.fetchImpl ?? fetch)(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+  } catch {
+    return { kind: 'unavailable', reason: timedOut ? 'timeout' : 'network' };
+  } finally {
+    clearTimeout(timer);
+  }
+
+  let body: unknown = null;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  return { kind: 'response', status: res.status, ok: res.ok, body };
+}
+
+/**
+ * Non-2xx: 422 + fail_safe means the engine rejected the input (show the safe referral screen).
+ * Everything else, including a 503 (rules, quality gate or detector unavailable on the server),
+ * means the server could not evaluate at all: like being offline (ADR 019/020).
+ */
+function errorResult(status: number, body: unknown): { kind: 'fail_safe'; code: string } | { kind: 'unavailable'; reason: UnavailableReason } {
+  const { code, failSafe } = errorOf(body);
+  if (status === 422 && failSafe) return { kind: 'fail_safe', code: code ?? 'invalid_input' };
+  if (status === 404) return { kind: 'unavailable', reason: 'not_enabled' };
+  if (status === 401) return { kind: 'unavailable', reason: 'unauthorized' };
+  if (status === 403) return { kind: 'unavailable', reason: 'forbidden' };
+  if (status === 429) return { kind: 'unavailable', reason: 'rate_limited' };
+  if (status === 422 || status === 413) return { kind: 'unavailable', reason: 'bad_response' };
+  return { kind: 'unavailable', reason: 'server' };
+}
+
+export async function evaluateScreening(input: TriageInput, deps: Deps = {}): Promise<EvaluateResult> {
   // Exactly the engine input: boxes never leave the device (ADR 014; the API rejects them).
   const body = {
     detections: input.detections.map((d) => ({ class: d.class, confidence: d.confidence })),
@@ -142,43 +211,74 @@ export async function evaluateScreening(input: TriageInput, deps: Deps = {}): Pr
     age_months: input.age_months,
     pain: input.pain,
   };
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? EVALUATE_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await (deps.fetchImpl ?? fetch)(`${baseUrl}${EVALUATE_PATH}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch {
-    return { kind: 'unavailable', reason: 'network' };
-  } finally {
-    clearTimeout(timer);
-  }
-
-  let parsed: unknown = null;
-  try {
-    parsed = await res.json();
-  } catch {
-    parsed = null;
-  }
-
-  if (res.ok) {
-    const evaluation = parseEvaluation(parsed);
+  const posted = await postJson(EVALUATE_PATH, body, deps, EVALUATE_TIMEOUT_MS);
+  if (posted.kind === 'unavailable') return posted;
+  if (posted.ok) {
+    const evaluation = parseEvaluation(posted.body);
     return evaluation ? { kind: 'ok', evaluation } : { kind: 'unavailable', reason: 'bad_response' };
   }
-  const { code, failSafe } = errorOf(parsed);
-  // Only an engine rejection of the input follows the fail-safe screen. A 503 (rules or Supabase
-  // unavailable on the server) means the server could not evaluate at all: like being offline,
-  // the device result stands (offline-first, ADR 019).
-  if (res.status === 422 && failSafe) return { kind: 'fail_safe', code: code ?? 'invalid_input' };
-  if (res.status === 404) return { kind: 'unavailable', reason: 'not_enabled' };
-  if (res.status === 401) return { kind: 'unavailable', reason: 'unauthorized' };
-  if (res.status === 403) return { kind: 'unavailable', reason: 'forbidden' };
-  if (res.status === 429) return { kind: 'unavailable', reason: 'rate_limited' };
-  if (res.status === 422) return { kind: 'unavailable', reason: 'bad_response' };
-  return { kind: 'unavailable', reason: 'server' };
+  return errorResult(posted.status, posted.body);
+}
+
+const photoStatuses = new Set<string>(triageRules.photo_statuses.map((p) => p.id));
+const clamp = (n: number, max: number) => Math.min(max, Math.max(0, n));
+
+/** Overlay boxes (pixels of the sent photo) -> normalised findings. `null` on anything unexpected. */
+function parseOverlay(v: unknown, width: number, height: number): Detection[] | null {
+  if (v === null || v === undefined) return [];
+  if (!isRecord(v) || !Array.isArray(v.detections)) return null;
+  const out: Detection[] = [];
+  for (const d of v.detections) {
+    if (
+      !isRecord(d) ||
+      (d.class !== 'caries_permanent' && d.class !== 'caries_primary') ||
+      typeof d.confidence !== 'number' ||
+      !isRecord(d.box)
+    ) {
+      return null;
+    }
+    const { x1, y1, x2, y2 } = d.box;
+    if (typeof x1 !== 'number' || typeof y1 !== 'number' || typeof x2 !== 'number' || typeof y2 !== 'number') return null;
+    const [left, right] = [clamp(x1, width), clamp(x2, width)];
+    const [top, bottom] = [clamp(y1, height), clamp(y2, height)];
+    out.push({
+      class: d.class,
+      confidence: d.confidence,
+      box: { x: left / width, y: top / height, w: (right - left) / width, h: (bottom - top) / height },
+    });
+  }
+  return out;
+}
+
+/** Validates a /photo 200 body. Anything unexpected is `null`, never a guessed level. */
+export function parsePhotoScreening(body: unknown, photo: { width: number; height: number }): PhotoScreening | null {
+  const evaluation = parseEvaluation(body);
+  if (!evaluation || !isRecord(body) || photo.width <= 0 || photo.height <= 0) return null;
+  const status = body.photo_status;
+  if (!isString(status) || !photoStatuses.has(status)) return null;
+  const detections = parseOverlay(body.overlay, photo.width, photo.height);
+  if (!detections || (status !== 'assessed' && detections.length > 0)) return null;
+  const modelVersion = isRecord(body.detector) && isString(body.detector.model_version) ? body.detector.model_version : null;
+  return { ...evaluation, photoStatus: status as PhotoStatus, detections, modelVersion };
+}
+
+export type PhotoRequest = {
+  /** Standard base64 of the JPEG that passed the on-device quality gate (metadata stripped). */
+  photoBase64: string;
+  photoWidth: number;
+  photoHeight: number;
+  symptoms: TriageInput['symptoms'];
+  ageMonths: number | null;
+  pain: TriageInput['pain'];
+};
+
+export async function screenPhoto(req: PhotoRequest, deps: Deps = {}): Promise<PhotoResult> {
+  const body = { photo: req.photoBase64, symptoms: req.symptoms, age_months: req.ageMonths, pain: req.pain };
+  const posted = await postJson(PHOTO_PATH, body, deps, PHOTO_TIMEOUT_MS);
+  if (posted.kind === 'unavailable') return posted;
+  if (posted.ok) {
+    const screening = parsePhotoScreening(posted.body, { width: req.photoWidth, height: req.photoHeight });
+    return screening ? { kind: 'ok', screening } : { kind: 'unavailable', reason: 'bad_response' };
+  }
+  return errorResult(posted.status, posted.body);
 }

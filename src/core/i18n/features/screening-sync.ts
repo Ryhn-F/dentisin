@@ -47,10 +47,8 @@ export const screeningSync = {
   requestOpen:
     'Permintaan anak tetap terbuka karena hasil ini tidak disimpan dan tidak dikirim. Nyalakan izin simpan atau kirim data di Profil, lalu periksa lagi.',
 
-  /** Result screen: who produced the level (ADR 019). */
+  /** Result screen: the server engine rejected the input (ADR 019/020). */
   source: {
-    server: 'Diperiksa di HP ini dan dicek ulang oleh server DentisAI.',
-    device: 'Diperiksa di HP ini.',
     serverRejectedTitle: 'Server tidak bisa memeriksa jawaban ini',
   },
 } as const;

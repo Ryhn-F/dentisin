@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 
+import { Banner } from '@/components/banner';
 import { Card } from '@/components/card';
 import { IconTile } from '@/components/icon-tile';
 import { Screen } from '@/components/screen';
@@ -26,7 +27,9 @@ const reasonIcon: Record<QualityReason, 'flashlight-on' | 'wb-sunny' | 'pan-tool
 };
 
 // Step 3c: result of the on-device quality gate. A failed photo gets one concrete fix per
-// reason and a friendly retake (app/CLAUDE.md §6.2: friendly retakes are a core feature).
+// reason and a friendly retake (app/CLAUDE.md §6.2: friendly retakes are a core feature). A clear
+// photo is sent to the DentisAI API for the detector (ADR 020); when it cannot be sent, the
+// parent can retry or go on without the photo.
 export default function Review() {
   const capture = useScreeningSession((s) => s.capture);
   const quality = useScreeningSession((s) => s.quality);
@@ -34,6 +37,7 @@ export default function Review() {
   const discardCapture = useScreeningSession((s) => s.discardCapture);
   const finish = useScreeningSession((s) => s.finish);
   const [busy, setBusy] = useState<'use' | 'skip' | null>(null);
+  const [sendFailed, setSendFailed] = useState(false);
   const leaving = useRef(false);
   const focused = useIsScreenFocused();
 
@@ -47,10 +51,14 @@ export default function Review() {
   if (!capture || !quality) return <View className="flex-1 bg-bg" />;
   const passed = quality.passed;
 
-  async function go(choice: 'use' | 'quality_failed') {
+  async function go(choice: 'use' | 'quality_failed' | 'not_sent') {
     setBusy(choice === 'use' ? 'use' : 'skip');
     try {
-      await finish(choice);
+      const result = await finish(choice);
+      if (result.kind === 'unavailable') {
+        setSendFailed(true);
+        return;
+      }
       router.push('/screening/result');
     } finally {
       setBusy(null);
@@ -58,6 +66,7 @@ export default function Review() {
   }
 
   function retake() {
+    setSendFailed(false);
     leaving.current = true;
     discardCapture();
     router.back();
@@ -103,20 +112,38 @@ export default function Review() {
               </View>
             ))
           : null}
-        <View className="gap-0.5">
-          <Text variant="caption" tone="secondary">
-            {t.attempt(attempts)}
-          </Text>
-          {quality.config_status === 'PLACEHOLDER' ? (
-            <Text variant="caption" tone="secondary">
-              {t.placeholderNote}
-            </Text>
-          ) : null}
-        </View>
+        <Text variant="caption" tone="secondary">
+          {t.attempt(attempts)}
+        </Text>
       </Card>
 
+      {passed && sendFailed ? (
+        <Banner testID="review-send-failed" tone="warning" title={t.sendFailedTitle} message={t.sendFailedBody} />
+      ) : null}
+
       <View className="gap-2">
-        {passed ? (
+        {passed && sendFailed ? (
+          <>
+            <Button
+              testID="review-retry-send"
+              title={t.retrySend}
+              icon="refresh"
+              variant="accent"
+              size="large"
+              loading={busy === 'use'}
+              disabled={busy !== null}
+              onPress={() => void go('use')}
+            />
+            <Button
+              testID="review-continue-not-sent"
+              title={t.continueNotSent}
+              variant="ghost"
+              loading={busy === 'skip'}
+              disabled={busy !== null}
+              onPress={() => void go('not_sent')}
+            />
+          </>
+        ) : passed ? (
           <>
             <Button
               testID="review-use"

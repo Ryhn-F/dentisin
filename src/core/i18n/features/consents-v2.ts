@@ -54,10 +54,10 @@ export const consentsV2 = {
     },
     b: {
       title: 'Kirim data tanpa identitas ke server',
-      what: 'Tahun dan bulan lahir, tingkat hasil skrining dan tanda yang terlihat (tanpa gambar), tanggal, versi aturan dan model, serta catatan sikat gigi. Semuanya memakai kode acak.',
-      why: 'Menyimpan riwayat di beberapa HP, membuat akun anak, dan memperbaiki aplikasi.',
-      where: 'Server di Singapura (layanan Supabase), di luar Indonesia. Email hanya dipakai layanan pengirim email untuk konfirmasi dan atur ulang kata sandi.',
-      ifDeclined: 'Semua fitur tetap jalan. Data hanya ada di HP ini dan akun anak tidak bisa dibuat.',
+      what: 'Tahun dan bulan lahir, tingkat hasil skrining dan tanda yang terlihat, tanggal, versi aturan dan model, serta catatan sikat gigi. Semuanya memakai kode acak. Saat skrining, foto gigi depan dan jawaban pertanyaan dikirim untuk diperiksa; foto tidak disimpan di server.',
+      why: 'Memeriksa foto gigi, menyimpan riwayat di beberapa HP, membuat akun anak, dan memperbaiki aplikasi.',
+      where: 'Server di Singapura (layanan Supabase), di luar Indonesia. Foto diperiksa di server DentisAI (layanan Microsoft Azure) lalu langsung dibuang. Email hanya dipakai layanan pengirim email untuk konfirmasi dan atur ulang kata sandi.',
+      ifDeclined: 'Foto gigi tidak bisa diperiksa; skrining tetap jalan dari jawaban pertanyaan. Data hanya ada di HP ini dan akun anak tidak bisa dibuat.',
       withdraw: 'Data baru tidak dikirim lagi. Kamu bisa meminta data dihapus.',
     },
     c: {
@@ -93,10 +93,10 @@ export const consentsV2 = {
     },
     b: {
       title: 'Kirim datamu tanpa identitas ke server',
-      what: 'Saya berusia 15 sampai 19 tahun. Saya sendiri bersedia DentisAI mengirim data teknis berkode acak tentang diri saya: tahun dan bulan lahir, tingkat hasil skrining dan tanda yang terlihat (tanpa gambar), tanggal, versi aturan dan model, serta catatan sikat gigi.',
-      why: 'Menyimpan riwayat di beberapa HP dan memperbaiki aplikasi.',
-      where: 'Server di Singapura (layanan Supabase), di luar Indonesia. Email hanya dipakai layanan pengirim email untuk konfirmasi dan atur ulang kata sandi.',
-      ifDeclined: 'Semua fitur tetap jalan. Data hanya ada di HP ini.',
+      what: 'Saya berusia 15 sampai 19 tahun. Saya sendiri bersedia DentisAI mengirim data teknis berkode acak tentang diri saya: tahun dan bulan lahir, tingkat hasil skrining dan tanda yang terlihat, tanggal, versi aturan dan model, serta catatan sikat gigi. Saat skrining, foto gigi depan dan jawaban saya dikirim untuk diperiksa; foto tidak disimpan di server.',
+      why: 'Memeriksa foto gigi, menyimpan riwayat di beberapa HP, dan memperbaiki aplikasi.',
+      where: 'Server di Singapura (layanan Supabase), di luar Indonesia. Foto diperiksa di server DentisAI (layanan Microsoft Azure) lalu langsung dibuang. Email hanya dipakai layanan pengirim email untuk konfirmasi dan atur ulang kata sandi.',
+      ifDeclined: 'Foto gigi tidak bisa diperiksa; skrining tetap jalan dari jawaban pertanyaan. Data hanya ada di HP ini.',
       withdraw: 'Data baru tidak dikirim lagi. Kamu bisa meminta data dihapus.',
     },
     c: {

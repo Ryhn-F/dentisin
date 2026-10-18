@@ -21,7 +21,7 @@ const answerLabel = id.screening.answers;
 
 const photoLabel: Record<ReferralData['photo'], string> = {
   assessed: t.photoAssessed,
-  not_assessed: t.photoNotAssessed,
+  not_sent: t.photoNotSent,
   not_taken: t.photoNotTaken,
   quality_failed: t.photoQualityFailed,
 };
@@ -42,7 +42,7 @@ function useReferralData(recordId: string | undefined): ReferralData | null {
     reasons: session.outcome.output.reasons,
     answers: session.answers,
     pain: session.pain,
-    photo: photoFromSession(session.photoChoice, session.analysis?.detectorAvailable ?? false),
+    photo: photoFromSession(session.photoChoice, session.analysis?.photoStatus ?? null),
     rulesVersion: session.outcome.output.rules_version,
   };
 }

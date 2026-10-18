@@ -1,5 +1,5 @@
 // Screening flow logic: red-flag short-circuit, engine input assembly (boxes stripped),
-// fail-safe errors, detector handling, session store and local saving rules.
+// fail-safe errors, session store and local saving rules (server photo flow: screening-server-check).
 import { encode } from 'jpeg-js';
 
 import { resolveMedicalModules } from '@/core/flags';
@@ -8,7 +8,6 @@ import type { ChildProfile } from '@/domain/models';
 import { triageRules, type Answer } from '@/domain/triage';
 import {
   ageInMonths,
-  analyzePhoto,
   buildTriageInput,
   isEmergencyAlready,
   redFlagQuestions,
@@ -18,8 +17,8 @@ import {
 } from '@/features/screening/pipeline';
 import { photoFromRecord, photoFromSession } from '@/features/screening/referral-data';
 import { useScreeningSession } from '@/features/screening/session-store';
-import { nullDetector, type Detection, type Detector } from '@/ml/detector';
 import { base64ToBytes, choosePictureSize, decodeJpeg, fitLongestSide, frameToCrop } from '@/ml/photo';
+import type { Detection } from '@/ml/detector';
 import type { QualityResult } from '@/ml/quality-gate';
 
 jest.mock('expo-image-manipulator', () => ({ ImageManipulator: {}, SaveFormat: { JPEG: 'jpeg' } }));
@@ -27,6 +26,7 @@ jest.mock('expo-file-system', () => ({ File: jest.fn() }));
 
 const allNo = (): Record<string, Answer> => Object.fromEntries(triageRules.questions.map((q) => [q.id, 'no']));
 const pixels = { width: 4, height: 4, channels: 3 as const, data: new Uint8Array(48) };
+const upload = { base64: 'AAAA', width: 4, height: 4 };
 const box = { x: 0.1, y: 0.2, w: 0.1, h: 0.2 };
 
 describe('flags', () => {
@@ -88,30 +88,14 @@ describe('pipeline', () => {
     expect(runTriage(missingAnswer)).toEqual({ kind: 'error', code: 'MISSING_SYMPTOM' });
   });
 
-  it('a photo without a detector is not assessed, and never gets detections', async () => {
-    await expect(analyzePhoto(pixels, nullDetector)).resolves.toEqual({
-      photoStatus: 'not_taken',
-      detections: [],
-      detectorAvailable: false,
-    });
-    await expect(nullDetector.detect(pixels)).rejects.toMatchObject({ code: 'detector_unavailable' });
-  });
-
-  it('uses detections from an available detector and fails closed when it throws', async () => {
-    const detections: Detection[] = [{ class: 'caries_permanent', confidence: 0.9, box }];
-    const ok: Detector = { available: true, name: 'test', modelVersion: '0.0.1', detect: async () => detections };
-    const broken: Detector = { ...ok, detect: async () => Promise.reject(new Error('boom')) };
-    await expect(analyzePhoto(pixels, ok)).resolves.toEqual({ photoStatus: 'assessed', detections, detectorAvailable: true });
-    await expect(analyzePhoto(pixels, broken)).resolves.toMatchObject({ photoStatus: 'not_taken', detectorAvailable: false });
-    await expect(analyzePhoto(null, ok)).resolves.toMatchObject({ photoStatus: 'not_taken' });
-  });
-
   it('describes the photo for the referral letter', () => {
-    expect(photoFromSession('use', true)).toBe('assessed');
-    expect(photoFromSession('use', false)).toBe('not_assessed');
-    expect(photoFromSession('quality_failed', false)).toBe('quality_failed');
-    expect(photoFromSession('red_flag', false)).toBe('not_taken');
-    expect(photoFromRecord({ photoTaken: true, photoStatus: 'not_taken' })).toBe('not_assessed');
+    expect(photoFromSession('use', 'assessed')).toBe('assessed');
+    expect(photoFromSession('use', 'quality_failed')).toBe('quality_failed');
+    expect(photoFromSession('not_sent', null)).toBe('not_sent');
+    expect(photoFromSession('quality_failed', null)).toBe('quality_failed');
+    expect(photoFromSession('red_flag', null)).toBe('not_taken');
+    expect(photoFromSession('skip', null)).toBe('not_taken');
+    expect(photoFromRecord({ photoTaken: true, photoStatus: 'not_taken' })).toBe('not_sent');
     expect(photoFromRecord({ photoTaken: false, photoStatus: 'not_taken' })).toBe('not_taken');
     expect(photoFromRecord({ photoTaken: true, photoStatus: 'assessed' })).toBe('assessed');
     expect(photoFromRecord({ photoTaken: true, photoStatus: 'quality_failed' })).toBe('quality_failed');
@@ -163,17 +147,30 @@ describe('session store', () => {
     expect(JSON.stringify(record)).not.toMatch(/file:|uri/);
   });
 
-  it('a used photo without a detector is "taken, not assessed" (no fake findings)', async () => {
+  it('a used photo without access to the API changes nothing (no fake findings)', async () => {
     const s = useScreeningSession.getState();
     s.start(child);
     answerAll(allNo(), 0);
-    s.setCapture({ uri: 'mem://photo', width: 640, height: 480, pixels }, passed);
+    s.setCapture({ uri: 'mem://photo', width: 640, height: 480, pixels, upload }, passed);
     const outcome = await useScreeningSession.getState().finish('use');
+    expect(outcome).toEqual({ kind: 'unavailable', reason: 'not_configured' });
+    const after = useScreeningSession.getState();
+    expect(after.outcome).toBeNull();
+    expect(after.upload).toEqual(upload);
+    expect(useLocalData.getState().screenings).toHaveLength(0);
+  });
+
+  it('a photo that could not be sent is "taken, not sent" and judged on the answers', async () => {
+    const s = useScreeningSession.getState();
+    s.start(child);
+    answerAll(allNo(), 0);
+    s.setCapture({ uri: 'mem://photo', width: 640, height: 480, pixels, upload }, passed);
+    const outcome = await useScreeningSession.getState().finish('not_sent');
     expect(outcome.kind === 'result' && outcome.output.level).toBe('scheduled');
     const after = useScreeningSession.getState();
-    expect(after.analysis).toEqual({ photoStatus: 'not_taken', detections: [], detectorAvailable: false });
-    expect(after.pixels).toBeNull();
-    expect(useLocalData.getState().screenings[0]).toMatchObject({ photoTaken: true, modelVersion: null });
+    expect(after.analysis).toEqual({ photoStatus: 'not_taken', detections: [], modelVersion: null });
+    expect(after.upload).toBeNull();
+    expect(useLocalData.getState().screenings[0]).toMatchObject({ photoTaken: true, photoStatus: 'not_taken', modelVersion: null });
   });
 
   it('a red flag after step 1 is an emergency; unasked questions stay out of the record', async () => {
@@ -217,8 +214,8 @@ describe('session store', () => {
   it('counts attempts, discards captures and resets', () => {
     const s = useScreeningSession.getState();
     s.start(child);
-    s.setCapture({ uri: 'mem://1', width: 1, height: 1, pixels }, passed);
-    s.setCapture({ uri: 'mem://2', width: 1, height: 1, pixels }, passed);
+    s.setCapture({ uri: 'mem://1', width: 1, height: 1, pixels, upload }, passed);
+    s.setCapture({ uri: 'mem://2', width: 1, height: 1, pixels, upload }, passed);
     expect(useScreeningSession.getState().attempts).toBe(2);
     useScreeningSession.getState().discardCapture();
     expect(useScreeningSession.getState().capture).toBeNull();

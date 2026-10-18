@@ -7,7 +7,7 @@ import { Card } from '@/components/card';
 import { ChildSwitcher } from '@/components/child-switcher';
 import { Sparkle } from '@/components/decor';
 import { HeroHeader } from '@/components/hero-header';
-import { Icon, type IconName } from '@/components/icon';
+import type { IconName } from '@/components/icon';
 import { IconTile, type IconTileTone } from '@/components/icon-tile';
 import { Mascot } from '@/components/mascot';
 import { Screen } from '@/components/screen';
@@ -82,18 +82,10 @@ function PrivacyCard() {
   );
 }
 
-function Hero({ soon }: { soon: boolean }) {
+function Hero() {
   return (
     // No ring: the camera badge owns the bottom-right corner.
     <HeroHeader withNavHeader={false} ring={false}>
-      {soon ? (
-        <View className="flex-row items-center gap-1.5 self-start rounded-full bg-sun py-1.5 pl-2.5 pr-3.5">
-          <Icon name="schedule" size={16} color={palette.onAccent} />
-          <Text variant="label" tone="onAccent">
-            {t.statusSoon}
-          </Text>
-        </View>
-      ) : null}
       <View className="flex-row items-center gap-3">
         <View className="flex-1 gap-2">
           <Text variant="display" accessibilityRole="header">
@@ -268,7 +260,7 @@ export default function Screening() {
   const enabled = flags.medical_modules;
   return (
     <Screen flush topScrim={{ color: 'primary', height: 'statusBar' }}>
-      <Hero soon={!enabled} />
+      <Hero />
       <View className="gap-7 px-5">{enabled ? <StartScreening /> : <ComingSoon />}</View>
     </Screen>
   );

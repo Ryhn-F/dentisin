@@ -1,9 +1,10 @@
 // State of the one screening in progress, shared by the flow screens. In memory only; the photo
-// file is deleted on retake and when the session ends (reset).
+// file is deleted on retake and when the session ends (reset). A photo that passed the on-device
+// quality gate is assessed by the DentisAI API (POST /v1/screening/photo, ADR 020).
 import { create } from 'zustand';
 
 import { useAccount } from '@/core/account/account-store';
-import { evaluateScreening } from '@/core/api/screening-api';
+import { evaluateScreening, screenPhoto, type UnavailableReason } from '@/core/api/screening-api';
 import { useSession } from '@/core/auth/session-store';
 import { isApiConfigured } from '@/core/config';
 import { recordScreening } from '@/core/sync/bridge';
@@ -11,15 +12,14 @@ import { isUuid, newUuid } from '@/core/util/uuid';
 import { useLocalData } from '@/data/local-store';
 import type { ChildProfile, ScreeningRecord } from '@/domain/models';
 import type { Answer } from '@/domain/triage';
-import { getDetector } from '@/ml/detector';
-import { discardPhoto, type PreparedPhoto } from '@/ml/photo';
-import type { PixelImage, QualityResult } from '@/ml/quality-gate';
+import { discardPhoto, type PreparedPhoto, type UploadPhoto } from '@/ml/photo';
+import type { QualityResult } from '@/ml/quality-gate';
 
 import {
   ageInMonths,
-  analyzePhoto,
   buildTriageInput,
   hasRedFlag,
+  noPhotoAnalysis,
   runTriage,
   type Answers,
   type Outcome,
@@ -27,7 +27,7 @@ import {
   type PhotoAnalysis,
   withLowestForUnasked,
 } from './pipeline';
-import { applyServerResult, shouldAskServer, type TriageSource } from './server-check';
+import { applyServerResult, canUseServer, shouldEvaluateOnServer, type ServerAccess, type TriageSource } from './server-check';
 
 export type Capture = { uri: string; width: number; height: number };
 /**
@@ -38,8 +38,14 @@ export type Capture = { uri: string; width: number; height: number };
  * - no_child: no child profile chosen.
  */
 export type SaveState = 'saved' | 'sent_only' | 'no_consent' | 'no_child' | null;
-/** How the flow reached the result: photo used, photo skipped, photo kept failing the gate, or red flag. */
-export type PhotoChoice = 'use' | 'skip' | 'quality_failed' | 'red_flag';
+/**
+ * How the flow reached the result: photo assessed by the server, photo skipped, photo kept
+ * failing the gate, photo could not be sent (the parent chose to go on without it), or red flag.
+ */
+export type PhotoChoice = 'use' | 'skip' | 'quality_failed' | 'not_sent' | 'red_flag';
+/** `finish('use')` could not reach the server: nothing changed, the review screen offers a retry. */
+export type PhotoUnavailable = { kind: 'unavailable'; reason: UnavailableReason };
+export type FinishResult = Outcome | PhotoUnavailable;
 export type StartOptions = {
   /**
    * Screening request (from a child account) this screening answers: sent as request_id on
@@ -57,7 +63,8 @@ type SessionState = {
   answers: Answers;
   pain: Pain | null;
   capture: Capture | null;
-  pixels: PixelImage | null;
+  /** The analysis JPEG sent to the API; dropped once the screening is finished. */
+  upload: UploadPhoto | null;
   quality: QualityResult | null;
   attempts: number;
   photoChoice: PhotoChoice | null;
@@ -71,7 +78,7 @@ type SessionState = {
    * its outbox state). The record itself exists only in this session's memory.
    */
   sentEventId: string | null;
-  /** Who produced the shown result: the device, or the DentisAI API re-check (ADR 019). */
+  /** Who produced the shown result: the DentisAI API, or the device when it was unreachable. */
   triageSource: TriageSource | null;
 
   start: (child: ChildProfile | null, now?: Date, opts?: StartOptions) => void;
@@ -79,7 +86,7 @@ type SessionState = {
   setPain: (pain: Pain) => void;
   setCapture: (photo: PreparedPhoto, quality: QualityResult) => void;
   discardCapture: () => void;
-  finish: (choice: PhotoChoice) => Promise<Outcome>;
+  finish: (choice: PhotoChoice) => Promise<FinishResult>;
   /** Mirrors a referral made for the saved record (see ./referral-sync.ts). */
   setReferralId: (screeningId: string, referralId: string) => void;
   reset: () => void;
@@ -93,7 +100,7 @@ const initial = {
   answers: {},
   pain: null,
   capture: null,
-  pixels: null,
+  upload: null,
   quality: null,
   attempts: 0,
   photoChoice: null,
@@ -104,6 +111,16 @@ const initial = {
   sentEventId: null,
   triageSource: null,
 } satisfies Partial<SessionState>;
+
+/** Live access to the API for this child (account, session and consent (b) stores). */
+export function serverAccessFor(childId: string | null): ServerAccess {
+  return {
+    apiConfigured: isApiConfigured,
+    signedIn: useSession.getState().status === 'signedIn',
+    isChildAccount: useAccount.getState().me?.accountType === 'child',
+    consentB: !!childId && !!useLocalData.getState().consents[childId]?.b,
+  };
+}
 
 const toBox = (b: { x: number; y: number; w: number; h: number }): [number, number, number, number] => [b.x, b.y, b.w, b.h];
 
@@ -129,7 +146,7 @@ export const useScreeningSession = create<SessionState>((set, get) => ({
     discardPhoto(get().capture?.uri);
     set((s) => ({
       capture: { uri: photo.uri, width: photo.width, height: photo.height },
-      pixels: photo.pixels,
+      upload: photo.upload,
       quality,
       attempts: s.attempts + 1,
     }));
@@ -137,50 +154,60 @@ export const useScreeningSession = create<SessionState>((set, get) => ({
 
   discardCapture: () => {
     discardPhoto(get().capture?.uri);
-    set({ capture: null, pixels: null, quality: null });
+    set({ capture: null, upload: null, quality: null });
   },
 
   finish: async (choice) => {
     const s = get();
-    const usePhoto = choice === 'use' && !!s.quality?.passed;
-    const analysis: PhotoAnalysis = usePhoto
-      ? await analyzePhoto(s.pixels, getDetector())
-      : {
-          photoStatus: choice === 'quality_failed' ? 'quality_failed' : 'not_taken',
-          detections: [],
-          detectorAvailable: false,
-        };
+    const access = serverAccessFor(s.child?.id ?? null);
     // Only a red-flag short-circuit may leave questions unasked (see withLowestForUnasked).
     const asked = choice === 'red_flag' ? withLowestForUnasked(s.answers, s.pain) : { answers: s.answers, pain: s.pain };
-    const input = buildTriageInput({
-      answers: asked.answers,
-      pain: asked.pain,
-      ageMonths: s.ageMonths,
-      photoStatus: analysis.photoStatus,
-      detections: analysis.detections,
-    });
-    let outcome = runTriage(input);
+    let analysis: PhotoAnalysis;
+    let outcome: Outcome;
+    let triageSource: TriageSource | null;
 
-    // Online re-check (ADR 019): the device result stands unless the server answers in time.
-    let triageSource: TriageSource | null = outcome.kind === 'result' ? 'device' : null;
-    if (
-      outcome.kind === 'result' &&
-      shouldAskServer({
-        apiConfigured: isApiConfigured,
-        signedIn: useSession.getState().status === 'signedIn',
-        isChildAccount: useAccount.getState().me?.accountType === 'child',
-        consentB: !!s.child && !!useLocalData.getState().consents[s.child.id]?.b,
-        redFlagShortCircuit: choice === 'red_flag',
-        localLevel: outcome.output.level,
-      })
-    ) {
-      const decision = applyServerResult(outcome.output, await evaluateScreening(outcome.input));
-      if (decision.kind === 'fail_safe') {
-        outcome = { kind: 'error', code: decision.code };
+    if (choice === 'use') {
+      // The photo passed the on-device gate: the server assesses it (quality gate, detector,
+      // reference triage). Unreachable -> nothing changes; the review screen offers a retry.
+      if (!s.quality?.passed || !s.upload || !canUseServer(access)) return { kind: 'unavailable', reason: 'not_configured' };
+      const result = await screenPhoto({
+        photoBase64: s.upload.base64,
+        photoWidth: s.upload.width,
+        photoHeight: s.upload.height,
+        symptoms: asked.answers as Record<string, Answer>,
+        ageMonths: s.ageMonths,
+        pain: asked.pain as Pain,
+      });
+      if (result.kind === 'unavailable') return result;
+      if (result.kind === 'fail_safe') {
+        analysis = noPhotoAnalysis('not_taken');
+        outcome = { kind: 'error', code: `server_${result.code}` };
         triageSource = null;
       } else {
-        outcome = { ...outcome, output: decision.output };
-        triageSource = decision.source;
+        const { screening } = result;
+        analysis = { photoStatus: screening.photoStatus, detections: screening.detections, modelVersion: screening.modelVersion };
+        const input = buildTriageInput({ ...asked, ageMonths: s.ageMonths, photoStatus: analysis.photoStatus, detections: analysis.detections });
+        outcome = { kind: 'result', output: screening.output, input };
+        triageSource = 'server';
+      }
+    } else {
+      analysis = noPhotoAnalysis(choice === 'quality_failed' ? 'quality_failed' : 'not_taken');
+      const input = buildTriageInput({ ...asked, ageMonths: s.ageMonths, photoStatus: analysis.photoStatus, detections: [] });
+      outcome = runTriage(input);
+      triageSource = outcome.kind === 'result' ? 'device' : null;
+      // Without a photo the server evaluates the same input; offline, the device result stands.
+      if (
+        outcome.kind === 'result' &&
+        shouldEvaluateOnServer({ ...access, redFlagShortCircuit: choice === 'red_flag', localLevel: outcome.output.level })
+      ) {
+        const decision = applyServerResult(outcome.output, await evaluateScreening(outcome.input));
+        if (decision.kind === 'fail_safe') {
+          outcome = { kind: 'error', code: decision.code };
+          triageSource = null;
+        } else {
+          outcome = { ...outcome, output: decision.output };
+          triageSource = decision.source;
+        }
       }
     }
 
@@ -202,8 +229,8 @@ export const useScreeningSession = create<SessionState>((set, get) => ({
           adviceIds: outcome.output.advice_ids,
           referralTemplateId: outcome.output.referral_template_id,
           rulesVersion: outcome.output.rules_version,
-          modelVersion: analysis.detectorAvailable ? getDetector().modelVersion : null,
-          photoTaken: choice === 'use' || choice === 'quality_failed',
+          modelVersion: analysis.modelVersion,
+          photoTaken: choice === 'use' || choice === 'quality_failed' || choice === 'not_sent',
           photoStatus: analysis.photoStatus,
           findings: analysis.detections.map((d) => ({ class: d.class, confidence: d.confidence, box: toBox(d.box) })),
           // What the parent answered; questions skipped after a red flag are left out.
@@ -236,8 +263,8 @@ export const useScreeningSession = create<SessionState>((set, get) => ({
         }
       }
     }
-    // Pixels are not needed after analysis; the review photo stays until the session ends.
-    set({ photoChoice: choice, analysis, outcome, record, saveState, sentEventId, triageSource, pixels: null });
+    // The upload copy is not needed any more; the review photo stays until the session ends.
+    set({ photoChoice: choice, analysis, outcome, record, saveState, sentEventId, triageSource, upload: null });
     return outcome;
   },
 
@@ -249,3 +276,12 @@ export const useScreeningSession = create<SessionState>((set, get) => ({
     set(initial);
   },
 }));
+
+/** True when a photo can be assessed (the guide hides the camera otherwise). */
+export function useCanSendPhoto(): boolean {
+  const childId = useScreeningSession((s) => s.child?.id ?? null);
+  const signedIn = useSession((s) => s.status === 'signedIn');
+  const isChildAccount = useAccount((s) => s.me?.accountType === 'child');
+  const consentB = useLocalData((s) => !!childId && !!s.consents[childId]?.b);
+  return canUseServer({ apiConfigured: isApiConfigured, signedIn, isChildAccount, consentB });
+}

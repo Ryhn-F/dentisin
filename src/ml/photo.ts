@@ -1,8 +1,9 @@
 // Post-capture photo handling. The camera's original file can carry EXIF (device, time,
 // sometimes location), so it is re-encoded and deleted straight away (app/CLAUDE.md §3.5):
 //   - review copy: JPEG, longest side <= 1280 px, shown on the review/result screens;
-//   - analysis copy: JPEG, longest side <= 640 px, decoded to pixels for the quality gate
-//     (and later the detector), then deleted.
+//   - analysis copy: JPEG, longest side <= 640 px, decoded to pixels for the quality gate; its
+//     base64 is what the screening sends to the DentisAI API for the detector (ADR 020). The
+//     file is deleted at once; the base64 lives in memory until the session finishes.
 // Both live only in the app's private cache — never the gallery — and the review copy is
 // deleted when the screening session ends. Nothing here touches the network.
 import { File } from 'expo-file-system';
@@ -15,7 +16,9 @@ export const REVIEW_MAX_SIDE = 1280;
 export const ANALYSIS_MAX_SIDE = 640;
 
 export type RawPhoto = { uri: string; width: number; height: number };
-export type PreparedPhoto = { uri: string; width: number; height: number; pixels: PixelImage };
+/** Metadata-free analysis JPEG (base64) and its size: what /v1/screening/photo receives. */
+export type UploadPhoto = { base64: string; width: number; height: number };
+export type PreparedPhoto = { uri: string; width: number; height: number; pixels: PixelImage; upload: UploadPhoto };
 export type CropRect = { originX: number; originY: number; width: number; height: number };
 export type Rect = { x: number; y: number; width: number; height: number };
 
@@ -133,7 +136,13 @@ export async function preparePhoto(raw: RawPhoto, crop?: CropRect | null): Promi
     if (!analysis.base64) throw new Error('analysis image has no pixel data');
     const { hasExif, ...pixels } = decodeJpeg(base64ToBytes(analysis.base64));
     if (__DEV__ && hasExif) console.warn('[screening] re-encoded photo still carries EXIF');
-    return { uri: review.uri, width: review.width, height: review.height, pixels };
+    return {
+      uri: review.uri,
+      width: review.width,
+      height: review.height,
+      pixels,
+      upload: { base64: analysis.base64, width: pixels.width, height: pixels.height },
+    };
   } catch (error) {
     discardPhoto(reviewUri);
     throw error;

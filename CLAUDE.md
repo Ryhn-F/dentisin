@@ -48,7 +48,7 @@ Kamu membangun aplikasi Android (Expo) yang **bekerja penuh tanpa internet**: on
 | PDF rujukan | `expo-print` (HTML → PDF di perangkat) + `expo-sharing` | [PERLU VERIFIKASI] di SDK 57 |
 | Audio | Aset audio ter-bundel (dibuat dari **Azure Speech S0** saat build — ADR 007; bukan Gemini TTS) + `expo-audio`; sertakan `MANIFEST.json` dan label "suara dibuat dengan AI" di layar Tentang | `expo-av` sudah dihapus pada SDK baru — pakai `expo-audio`. Cek ketersediaan suara TTS perangkat sebelum bergantung pada `expo-speech` |
 | Auth & sinkron | **Supabase Auth: email + password** (konfirmasi email aktif; SMTP gratis — ADR 008; **tanpa SMS OTP**; reset password via email; CAPTCHA) + outbox kustom ke Supabase RPC (ADR 005, 008) | PowerSync hanya bila ada kebutuhan sinkron dua arah |
-| Klien data | `@supabase/supabase-js` (auth, RPC, storage). Klien FastAPI: hanya `POST /v1/screening/evaluate` sebagai pemeriksaan ulang hasil skrining (ADR 019; `EXPO_PUBLIC_API_BASE_URL`); hasil HP selalu berlaku bila server tidak tersedia | |
+| Klien data | `@supabase/supabase-js` (auth, RPC, storage). Klien FastAPI (`EXPO_PUBLIC_API_BASE_URL`): `POST /v1/screening/photo` menilai foto skrining dengan detektor server (ADR 020; consent (b); gagal → coba lagi / lanjut tanpa foto) dan `POST /v1/screening/evaluate` untuk skrining tanpa foto (ADR 019); hasil server dipakai langsung, hasil mesin TS di HP berlaku bila server tidak tersedia | |
 | Uji | Jest + `@testing-library/react-native`, Maestro/Detox untuk alur E2E offline | |
 
 ## 5. Struktur yang disarankan
