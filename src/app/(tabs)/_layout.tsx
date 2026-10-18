@@ -1,28 +1,14 @@
 import { Tabs } from 'expo-router/js-tabs';
-import { Pressable, View, type ColorValue, type GestureResponderEvent } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Pressable, View, type GestureResponderEvent } from 'react-native';
 
-import { Icon, type IconName } from '@/components/icon';
+import { Icon } from '@/components/icon';
+import { tabIcon, useTabScreenOptions } from '@/components/tab-bar';
 import { Text } from '@/components/ui/text';
 import { id } from '@/core/i18n/id';
-import { fontFamilies, palette, shadows } from '@/core/theme';
+import { palette, shadows } from '@/core/theme';
 import { cn } from '@/lib/utils';
 
-// Fixed height (pill indicator + label need ~80dp, Material 3 nav bar), so the
-// bottom safe-area inset is added by hand.
-const TAB_BAR_HEIGHT = 80;
 const CENTER_BUTTON = 64;
-
-function tabIcon(name: IconName) {
-  return function TabIcon({ focused, color }: { focused: boolean; color: ColorValue }) {
-    // Active tab: bold blue pill behind a white icon (design reference 1, M3 indicator).
-    return (
-      <View className={cn('h-9 w-14 items-center justify-center rounded-full', focused && 'bg-primary')}>
-        <Icon name={name} size={24} color={focused ? palette.onPrimary : color} />
-      </View>
-    );
-  };
-}
 
 // The main feature sits in the middle as a raised round button (design reference 1:
 // big blue circle). It is still a normal tab: same role, label and selected state.
@@ -72,33 +58,9 @@ function ScreeningTabButton({
 // Five always-visible destinations with icon + label (child-friendly navigation);
 // Skrining, the main feature, in the middle.
 export default function TabsLayout() {
-  const insets = useSafeAreaInsets();
+  const screenOptions = useTabScreenOptions();
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: palette.primary,
-        tabBarInactiveTintColor: palette.textSecondary,
-        // The keyboard must not lift the tab bar over form fields.
-        tabBarHideOnKeyboard: true,
-        tabBarStyle: {
-          backgroundColor: palette.card,
-          borderTopWidth: 0,
-          height: TAB_BAR_HEIGHT + insets.bottom,
-          paddingTop: 10,
-          paddingBottom: insets.bottom + 10,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          boxShadow: shadows.raised,
-          overflow: 'visible',
-        },
-        tabBarLabelStyle: { fontFamily: fontFamilies.bold, fontSize: 12, lineHeight: 16, marginTop: 4 },
-        headerStyle: { backgroundColor: palette.bg },
-        headerTintColor: palette.text,
-        headerTitleStyle: { fontFamily: fontFamilies.extrabold, fontSize: 18 },
-        headerShadowVisible: false,
-        sceneStyle: { backgroundColor: palette.bg },
-      }}
-    >
+    <Tabs screenOptions={screenOptions}>
       {/* Home opens with its own greeting block, like the reference home screen. */}
       <Tabs.Screen name="home" options={{ title: id.nav.home, tabBarIcon: tabIcon('home'), headerShown: false }} />
       <Tabs.Screen name="features" options={{ title: id.nav.features, tabBarIcon: tabIcon('apps') }} />

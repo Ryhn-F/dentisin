@@ -47,6 +47,16 @@ describe('UI strings (src/core/i18n/id.ts)', () => {
     expect(strings.length).toBeGreaterThan(10);
   });
 
+  it('also scans the feature modules in src/core/i18n/features (mounted as id.<name>)', () => {
+    const keys = new Set(strings.map(([key]) => key.split('.')[0]));
+    for (const name of [
+      'registerFlow', 'teenSetup', 'childLogin', 'accountGate', 'homeV2', 'kid', 'childAccounts',
+      'consentsV2', 'requests', 'screeningSync', 'recording', 'proofs', 'timeline', 'syncV2',
+    ]) {
+      expect(keys).toContain(name);
+    }
+  });
+
   it.each(strings)('%s contains no forbidden phrase', (_key, text) => {
     expect(findForbidden(text)).toEqual([]);
   });

@@ -1,7 +1,7 @@
 import type { Session } from '@supabase/supabase-js';
 import { create } from 'zustand';
 
-import { appRoles, type AppRole } from '@/domain/models';
+import { useAccount } from '@/core/account/account-store';
 
 import { appStorage } from './secure-storage';
 import { supabase } from './supabase';
@@ -11,8 +11,9 @@ export type AuthStatus = 'loading' | 'signedOut' | 'signedIn' | 'guest';
 
 const GUEST_KEY = 'dentisai.guest';
 const SESSION_KEY = 'dentisai.auth';
-// Last known roles, so the profile shows the right badge offline.
-const ROLES_KEY = 'dentisai.roles';
+// Pre-v2 cache of user_role rows. Roles now come from my_account() (account store); the old
+// key is only removed on sign-out.
+const LEGACY_ROLES_KEY = 'dentisai.roles';
 
 type SessionState = {
   status: AuthStatus;
@@ -22,11 +23,7 @@ type SessionState = {
   pendingEmail: string | null;
   /** True after a password-recovery link created a session. */
   recovering: boolean;
-  /** From public.user_role (the signup trigger always grants 'guardian'). */
-  roles: AppRole[];
   hydrate: () => Promise<void>;
-  /** Re-reads the account's roles; keeps the last known ones when offline. */
-  refreshRoles: () => Promise<void>;
   continueAsGuest: () => Promise<void>;
   leaveGuest: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -53,18 +50,13 @@ async function readStoredUser(): Promise<{ email: string | null; userId: string 
   }
 }
 
-function parseRoles(value: unknown): AppRole[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((r): r is AppRole => typeof r === 'string' && (appRoles as readonly string[]).includes(r));
-}
-
-async function readStoredRoles(): Promise<AppRole[]> {
-  try {
-    const raw = await appStorage.getItem(ROLES_KEY);
-    return raw ? parseRoles(JSON.parse(raw)) : [];
-  } catch {
-    return [];
-  }
+/**
+ * Points the account store at `userId`, restoring its cached my_account() (offline routing),
+ * then refreshes it in the background. Roles, account type and capabilities live there.
+ */
+async function activateAccount(userId: string) {
+  await useAccount.getState().setUser(userId);
+  void useAccount.getState().refresh();
 }
 
 let subscribed = false;
@@ -75,7 +67,6 @@ export const useSession = create<SessionState>((set, get) => ({
   userId: null,
   pendingEmail: null,
   recovering: false,
-  roles: [],
 
   async hydrate() {
     const guest = (await appStorage.getItem(GUEST_KEY)) === '1';
@@ -89,7 +80,10 @@ export const useSession = create<SessionState>((set, get) => ({
         if (session) {
           set(fromSession(session));
         } else if (event === 'SIGNED_OUT') {
-          set({ status: get().status === 'guest' ? 'guest' : 'signedOut', email: null, userId: null, roles: [] });
+          // Also when the server ends the session (e.g. a disabled child account's refresh
+          // token is refused): forget the account so routing returns to the entry screens.
+          set({ status: get().status === 'guest' ? 'guest' : 'signedOut', email: null, userId: null });
+          void useAccount.getState().clear();
         }
       });
     }
@@ -97,13 +91,16 @@ export const useSession = create<SessionState>((set, get) => ({
     if (supabase) {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
-        set({ ...fromSession(data.session), roles: await readStoredRoles() });
-        void get().refreshRoles();
+        await activateAccount(data.session.user.id);
+        set(fromSession(data.session));
         return;
       }
       const stored = await readStoredUser();
       if (stored) {
-        set({ status: 'signedIn', ...stored, roles: await readStoredRoles() });
+        // Offline with an expired token: route from the cached account; refresh() fails
+        // quietly and is retried on the next foreground.
+        await activateAccount(stored.userId);
+        set({ status: 'signedIn', ...stored });
         return;
       }
     }
@@ -122,25 +119,19 @@ export const useSession = create<SessionState>((set, get) => ({
   },
 
   async signOut() {
-    // scope 'local' works offline; local data stays unless the user deletes it.
-    if (supabase) await supabase.auth.signOut({ scope: 'local' });
-    await appStorage.removeItem(SESSION_KEY);
-    await appStorage.removeItem(ROLES_KEY);
-    set({ status: 'signedOut', email: null, userId: null, recovering: false, roles: [] });
-  },
-
-  async refreshRoles() {
-    if (!supabase || get().status !== 'signedIn') return;
-    try {
-      // RLS: an account reads only its own rows (user_role_select_own).
-      const { data, error } = await supabase.from('user_role').select('role');
-      if (error || !data) return;
-      const roles = parseRoles(data.map((row: { role: unknown }) => row.role));
-      set({ roles });
-      await appStorage.setItem(ROLES_KEY, JSON.stringify(roles));
-    } catch {
-      // Offline: keep the last known roles.
+    // scope 'local' works offline; local data stays unless the user deletes it. This also
+    // ends a child-login session: it is an ordinary Supabase session in the same storage.
+    if (supabase) {
+      try {
+        await supabase.auth.signOut({ scope: 'local' });
+      } catch {
+        // The stored session is removed below either way.
+      }
     }
+    await appStorage.removeItem(SESSION_KEY);
+    await appStorage.removeItem(LEGACY_ROLES_KEY);
+    await useAccount.getState().clear();
+    set({ status: 'signedOut', email: null, userId: null, recovering: false });
   },
 
   setPendingEmail(email) {

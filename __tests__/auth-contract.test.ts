@@ -1,6 +1,7 @@
 // Backend auth contract (backend/supabase/config.toml [auth], backend/web/captcha,
 // backend/web/auth/callback, smtp-handler) as seen from the app.
 
+import { useAccount } from '@/core/account/account-store';
 import { completeAuthCallback, requestPasswordReset, resendConfirmation, signIn, signUp } from '@/core/auth/auth-service';
 import { isAllowedCaptchaNavigation, parseCaptchaMessage, tokenFromCaptchaUrl } from '@/core/auth/captcha';
 import { authErrorMessage } from '@/core/auth/errors';
@@ -25,16 +26,41 @@ jest.mock('@/core/auth/supabase', () => {
     onAuthStateChange: jest.fn(),
     signOut: jest.fn(),
   };
-  const select = jest.fn();
-  return { supabase: { auth, from: jest.fn(() => ({ select })) }, mockSelect: select };
+  return { supabase: { auth, rpc: jest.fn() } };
 });
 
 const mocked = jest.requireMock('@/core/auth/supabase') as {
-  supabase: { auth: Record<string, jest.Mock> };
-  mockSelect: jest.Mock;
+  supabase: { auth: Record<string, jest.Mock>; rpc: jest.Mock };
 };
 const mockAuth = mocked.supabase.auth;
-const mockSelect = mocked.mockSelect;
+const mockRpc = mocked.supabase.rpc;
+
+const UID = '11111111-1111-4111-8111-111111111111';
+
+function myAccountJson(roles: string[]) {
+  return {
+    user_id: UID,
+    account_type: 'guardian',
+    roles,
+    self_child_id: null,
+    child_accounts: 0,
+    child_account: null,
+    flags: { brushing_proof_video: false },
+    capabilities: { create_child_accounts: true, register_proofs: false },
+    limits: {
+      teen_min_age: 15,
+      teen_max_age: 19,
+      max_child_accounts_per_guardian: 6,
+      streak_min_duration_s: 60,
+      request_max_per_child_per_day: 5,
+      request_expiry_days: 14,
+      proof_max_bytes: 10485760,
+      proof_max_duration_s: 180,
+      proof_max_per_child_per_day: 3,
+      proof_retention_days: 7,
+    },
+  };
+}
 
 function memoryBackend(): KeyValueBackend {
   const data = new Map<string, string>();
@@ -52,7 +78,8 @@ function memoryBackend(): KeyValueBackend {
 beforeEach(() => {
   jest.clearAllMocks();
   setStorageBackendForTests(memoryBackend());
-  useSession.setState({ status: 'signedOut', email: null, userId: null, pendingEmail: null, recovering: false, roles: [] });
+  useSession.setState({ status: 'signedOut', email: null, userId: null, pendingEmail: null, recovering: false });
+  useAccount.setState({ userId: null, me: null, status: 'idle', lastError: null, lastFetchedAt: null });
 });
 
 afterAll(() => setStorageBackendForTests(null));
@@ -139,13 +166,17 @@ describe('error mapping for the current backend setup', () => {
 });
 
 describe('auth service ↔ Supabase Auth', () => {
-  it('signs up with the https callback page and the CAPTCHA token, then waits for the email', async () => {
+  it('signs up with the account type, the https callback page and the CAPTCHA token, then waits for the email', async () => {
     mockAuth.signUp.mockResolvedValue({ data: { user: { id: 'u1' }, session: null }, error: null });
-    const result = await signUp(' Orang.Tua@Contoh.com ', 'Gigi1234', 'captcha-token');
+    const result = await signUp(' Orang.Tua@Contoh.com ', 'Gigi1234', 'teen', 'captcha-token');
     expect(mockAuth.signUp).toHaveBeenCalledWith({
       email: 'orang.tua@contoh.com',
       password: 'Gigi1234',
-      options: { emailRedirectTo: config.authRedirectUrl, captchaToken: 'captcha-token' },
+      options: {
+        data: { account_type: 'teen' },
+        emailRedirectTo: config.authRedirectUrl,
+        captchaToken: 'captcha-token',
+      },
     });
     expect(result).toEqual({ ok: true, needsConfirmation: true });
     expect(useSession.getState().pendingEmail).toBe('orang.tua@contoh.com');
@@ -160,7 +191,7 @@ describe('auth service ↔ Supabase Auth', () => {
 
   it('does not ask for confirmation when the project auto-confirms', async () => {
     mockAuth.signUp.mockResolvedValue({ data: { user: { id: 'u1' }, session: { access_token: 'a' } }, error: null });
-    await expect(signUp('a@contoh.com', 'Gigi1234')).resolves.toEqual({ ok: true, needsConfirmation: false });
+    await expect(signUp('a@contoh.com', 'Gigi1234', 'guardian')).resolves.toEqual({ ok: true, needsConfirmation: false });
   });
 
   it('reports a failed confirmation email in plain words', async () => {
@@ -168,7 +199,10 @@ describe('auth service ↔ Supabase Auth', () => {
       data: { user: null, session: null },
       error: { code: 'unexpected_failure', status: 500, message: 'Error sending confirmation email' },
     });
-    await expect(signUp('a@contoh.com', 'Gigi1234')).resolves.toMatchObject({ ok: false, message: id.auth.errors.emailSendFailed });
+    await expect(signUp('a@contoh.com', 'Gigi1234', 'guardian')).resolves.toMatchObject({
+      ok: false,
+      message: id.auth.errors.emailSendFailed,
+    });
   });
 
   it('passes the CAPTCHA token and redirect to resend and password reset', async () => {
@@ -194,28 +228,33 @@ describe('auth service ↔ Supabase Auth', () => {
     await expect(completeAuthCallback({ kind: 'code', code: 'c2', type: null })).resolves.toEqual({ ok: true, type: null });
   });
 
-  it('loads the account roles from user_role after signing in', async () => {
+  it('reads my_account() after signing in; roles come from it and unknown roles are dropped', async () => {
     mockAuth.signInWithPassword.mockImplementation(async () => {
       // supabase-js fires SIGNED_IN before resolving; the store listener sets this.
-      useSession.setState({ status: 'signedIn', userId: 'u1', email: 'a@contoh.com' });
+      useSession.setState({ status: 'signedIn', userId: UID, email: 'a@contoh.com' });
       return { data: {}, error: null };
     });
-    mockSelect.mockResolvedValue({ data: [{ role: 'guardian' }, { role: 'kader' }, { role: 'superuser' }], error: null });
+    mockAuth.getSession.mockResolvedValue({ data: { session: { user: { id: UID } } } });
+    mockRpc.mockResolvedValue({ data: myAccountJson(['guardian', 'kader', 'superuser']), error: null, status: 200 });
     await expect(signIn('a@contoh.com', 'Gigi1234', 'tok')).resolves.toEqual({ ok: true });
-    await new Promise((r) => setTimeout(r, 0));
     expect(mockAuth.signInWithPassword).toHaveBeenCalledWith({
       email: 'a@contoh.com',
       password: 'Gigi1234',
       options: { captchaToken: 'tok' },
     });
-    // Unknown values are dropped; only public.app_role members are kept.
-    expect(useSession.getState().roles).toEqual(['guardian', 'kader']);
+    expect(mockRpc).toHaveBeenCalledWith('my_account', undefined);
+    // ADR 018: kader is no longer a role the app knows; only public roles survive.
+    expect(useAccount.getState().me?.roles).toEqual(['guardian']);
+    expect(useAccount.getState().status).toBe('ready');
   });
 
-  it('keeps the last known roles when the role lookup fails (offline)', async () => {
-    useSession.setState({ status: 'signedIn', roles: ['kader'] });
-    mockSelect.mockResolvedValue({ data: null, error: { message: 'Failed to fetch' } });
-    await useSession.getState().refreshRoles();
-    expect(useSession.getState().roles).toEqual(['kader']);
+  it('keeps the last known account when my_account() fails (offline)', async () => {
+    mockRpc.mockResolvedValueOnce({ data: myAccountJson(['guardian']), error: null, status: 200 });
+    await useAccount.getState().setUser(UID);
+    await useAccount.getState().refresh();
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: 'TypeError: Network request failed', code: '' }, status: 0 });
+    await useAccount.getState().refresh();
+    expect(useAccount.getState().me?.accountType).toBe('guardian');
+    expect(useAccount.getState()).toMatchObject({ status: 'ready', lastError: 'network' });
   });
 });
