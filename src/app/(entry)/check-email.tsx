@@ -8,7 +8,7 @@ import { Screen } from '@/components/screen';
 import { Turnstile } from '@/components/turnstile';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { resendConfirmation } from '@/core/auth/auth-service';
+import { getPendingTeenBirth, resendConfirmation } from '@/core/auth/auth-service';
 import { useSession } from '@/core/auth/session-store';
 import { useCaptcha } from '@/core/auth/use-captcha';
 import { id } from '@/core/i18n/id';
@@ -22,6 +22,16 @@ export default function CheckEmail() {
   const [message, setMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const captcha = useCaptcha('resend');
+  // The register screen keeps the birth of a teen sign-up until the setup screen sends it.
+  const [isTeen, setIsTeen] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void getPendingTeenBirth().then((b) => live && setIsTeen(b !== null));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -43,6 +53,9 @@ export default function CheckEmail() {
     <Screen>
       <EmptyState mascot="wow" title={t.title} message={email ? t.body(email) : t.bodyNoEmail} />
       <View className="gap-2">
+        <Text variant="caption" tone="secondary" className="text-center" testID="check-email-next">
+          {isTeen ? id.registerFlow.checkEmail.teenNext : id.registerFlow.checkEmail.guardianNext}
+        </Text>
         <Text variant="caption" tone="secondary" className="text-center">
           {t.spamHint}
         </Text>

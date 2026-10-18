@@ -152,6 +152,12 @@ export default function Login() {
           />
           <Button title={t.signUp} variant="secondary" onPress={() => router.replace('/register')} />
           <Button title={t.useWithoutAccount} variant="ghost" onPress={() => continueAsGuest()} />
+          <Button
+            title={id.childLogin.entryButton}
+            variant="ghost"
+            onPress={() => router.push('/child-login')}
+            testID="login-child"
+          />
           <Text variant="caption" tone="secondary" className="text-center">
             {t.withoutAccountNote}
           </Text>

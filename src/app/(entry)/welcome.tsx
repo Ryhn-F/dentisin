@@ -58,6 +58,12 @@ export default function Welcome() {
         <Button title={t.signIn} variant="accent" size="large" onPress={() => router.push('/login')} />
         <Button title={t.signUp} variant="secondary" onPress={() => router.push('/register')} />
         <Button title={t.useWithoutAccount} variant="ghost" onPress={() => continueAsGuest()} />
+        <Button
+          title={id.childLogin.entryButton}
+          variant="ghost"
+          onPress={() => router.push('/child-login')}
+          testID="welcome-child"
+        />
         <Text variant="caption" tone="secondary" className="text-center">
           {t.withoutAccountNote}
         </Text>
