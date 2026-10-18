@@ -20,7 +20,12 @@ export const config = {
   // It is in Supabase "Redirect URLs" AND in the mailer's ALLOWED_REDIRECT_PREFIXES; a
   // redirect the mailer does not allow is dropped and the user lands on the bare Site URL.
   authRedirectUrl: read(process.env.EXPO_PUBLIC_AUTH_REDIRECT_URL) ?? 'https://app.ryhnfir.dev/auth/callback',
+  // DentisAI ML/AI API (backend/api, FastAPI; ADR 019). Optional: without it every screening is
+  // evaluated on the device only. No trailing slash.
+  apiBaseUrl: read(process.env.EXPO_PUBLIC_API_BASE_URL)?.replace(/\/+$/, '') ?? null,
 } as const;
+
+export const isApiConfigured = Boolean(config.apiBaseUrl);
 
 export const isSupabaseConfigured = Boolean(config.supabaseUrl && config.supabaseAnonKey);
 
