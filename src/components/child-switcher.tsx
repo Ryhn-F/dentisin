@@ -12,7 +12,9 @@ export type ChildOption = { id: string; nickname: string };
 // Avatar colors rotate so siblings are easy to tell apart (not a meaning carrier).
 const avatar = ['bg-sun', 'bg-coral', 'bg-tint-mint', 'bg-tint-sky'];
 
-// Nicknames exist only on this device (the backend stores no names).
+// Nicknames exist only on this device (the backend stores no names). Callers pass a display
+// label for children without one (e.g. "Anak 2"); a blank label still gets a generic name so the
+// chip never renders empty for a screen reader.
 export function ChildSwitcher({
   kids,
   activeId,
@@ -33,12 +35,13 @@ export function ChildSwitcher({
     >
       {kids.map((kid, i) => {
         const selected = kid.id === activeId;
+        const label = kid.nickname.trim() || id.components.childSwitcher.unnamed;
         return (
           <PressableScale
             key={kid.id}
             testID={`child-chip-${kid.id}`}
             accessibilityRole="button"
-            accessibilityLabel={kid.nickname}
+            accessibilityLabel={label}
             accessibilityState={{ selected }}
             onPress={() => onChange(kid.id)}
             className={cn(
@@ -49,11 +52,11 @@ export function ChildSwitcher({
           >
             <View className={cn('size-9 items-center justify-center rounded-full', avatar[i % avatar.length])}>
               <Text variant="headline" style={{ color: palette.text }}>
-                {kid.nickname.slice(0, 1).toUpperCase()}
+                {label.slice(0, 1).toUpperCase()}
               </Text>
             </View>
             <Text variant="label" tone={selected ? 'onPrimary' : 'default'}>
-              {kid.nickname}
+              {label}
             </Text>
           </PressableScale>
         );

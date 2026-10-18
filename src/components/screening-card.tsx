@@ -13,9 +13,20 @@ const t = id.home;
 
 // Bold yellow entry point to the main feature (also the center tab). While the feature
 // waits for the dentist's sign-off it says so, and leads to the explanation page.
-export function ScreeningCard({ onPress, soon = true, testID }: { onPress: () => void; soon?: boolean; testID?: string }) {
+// `activeBody` replaces the active text (e.g. a teen screens their own teeth, not a child's).
+export function ScreeningCard({
+  onPress,
+  soon = true,
+  activeBody,
+  testID,
+}: {
+  onPress: () => void;
+  soon?: boolean;
+  activeBody?: string;
+  testID?: string;
+}) {
   const { touch } = useTheme();
-  const body = soon ? t.screeningCardBody : t.screeningCardBodyActive;
+  const body = soon ? t.screeningCardBody : (activeBody ?? t.screeningCardBodyActive);
   return (
     <TextClassContext.Provider value="text-sun-on">
       <PressableScale
