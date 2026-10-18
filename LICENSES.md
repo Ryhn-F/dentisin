@@ -17,6 +17,7 @@ Required by `app/CLAUDE.md` §3.11 (closed repo, permissive licenses only; no AG
 | expo | 57.0.27 | MIT |
 | expo-camera | 57.0.6 | MIT — still photos for screening (ADR 016); no microphone, no barcode scanner |
 | expo-constants | 57.0.21 | MIT |
+| expo-crypto | 57.0.4 | MIT — `randomUUID()` for every id the backend stores (ADR 017) |
 | expo-device | 57.0.2 | MIT |
 | expo-file-system | 57.0.7 | MIT — deletes temporary photos |
 | expo-font | 57.0.4 | MIT |
@@ -29,6 +30,7 @@ Required by `app/CLAUDE.md` §3.11 (closed repo, permissive licenses only; no AG
 | expo-splash-screen | 57.0.9 | MIT |
 | expo-status-bar | 57.0.1 | MIT |
 | expo-system-ui | 57.0.4 | MIT |
+| expo-video | 57.0.5 | MIT — plays brushing proof videos from short-lived signed URLs (ADR 017/018); no config plugin needed (no PiP/background playback) |
 | expo-web-browser | 57.0.3 | MIT |
 | jpeg-js | 0.4.4 | BSD-3-Clause — decodes the downscaled photo for the quality gate |
 | nativewind | 4.2.7 | MIT |
