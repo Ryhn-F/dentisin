@@ -4,7 +4,7 @@
 > Stack ditetapkan di **ADR 004** (Expo menggantikan Flutter). Kode & komentar: Inggris. Teks UI: Bahasa Indonesia sederhana (mode anak ≈ kelas 4 SD).
 
 ## 1. Peran & batas tanggung jawab
-Kamu membangun aplikasi Android (Expo) yang **bekerja penuh tanpa internet**: onboarding + persetujuan, kuesioner red flag, pemotretan terpandu + quality gate, inferensi on-device, triase, rujukan PDF, rekomendasi pasta gigi, streak sikat gigi (kamera depan), kartu edukasi statis, mode kader/guru, dan sinkronisasi saat ada sinyal. **Chatbot ditunda (ADR 008).**
+Kamu membangun aplikasi Android (Expo) yang **bekerja penuh tanpa internet**: onboarding + persetujuan, kuesioner red flag, pemotretan terpandu + quality gate, inferensi on-device, triase, rujukan PDF, rekomendasi pasta gigi, streak sikat gigi (kamera depan; video bukti opsional, ADR 017/018), kartu edukasi statis, akun orang tua/remaja/anak (ADR 017; mode kader/guru dihapus, ADR 018), dan sinkronisasi saat ada sinyal. **Chatbot ditunda (ADR 008).**
 
 **Milikmu:** `app/**`, implementasi TypeScript mesin triase & rekomendasi (membaca aturan yang dibundel), UI/UX, aksesibilitas, kinerja on-device, DB lokal terenkripsi, outbox sinkron, klien API.
 **Bukan milikmu (minta lewat issue/ADR):** `triage/rules.yaml`, `recommender/*.json`, `ml/**`, `backend/**`, `supabase/**`, isi klinis (ambang, red flag, kandungan). Kamu **mengimplementasikan** yang tertulis di sana.
@@ -20,11 +20,11 @@ Kamu membangun aplikasi Android (Expo) yang **bekerja penuh tanpa internet**: on
 3. **Red flag menang.** Kuesioner gejala dijalankan **sebelum** foto; jika ada red flag → layar darurat penuh, tersedia offline.
 4. **Offline-first.** Skrining, triase, rekomendasi, streak, edukasi, rujukan PDF harus jalan di mode pesawat. Tidak ada fitur inti yang bergantung jaringan.
 5. **Privasi anak (UU PDP Ps. 4 & 25; PP Tunas).**
-   - Persetujuan granular & tercatat: (a) simpan lokal, (b) kirim data teknis terpseudonim, (c) unggah foto — **opt-in terpisah, default mati**.
+   - Persetujuan granular & tercatat: (a) simpan lokal, (b) kirim data teknis terpseudonim, (c) unggah foto, (d) video bukti sikat gigi (ADR 017/018) — **opt-in terpisah, default mati**.
    - DB terenkripsi (SQLCipher); foto disimpan terenkripsi (lihat §4); kunci di Android Keystore lewat `expo-secure-store`. Hapus EXIF/lokasi. Foto tidak masuk galeri publik.
-   - **Frame/video sikat gigi tidak pernah ditulis ke disk atau dikirim.** Proses di memori, buang.
+   - **Frame/video sikat gigi tidak ditulis ke disk atau dikirim**, kecuali **video bukti** (ADR 017/018, consent d): hanya akun anak dengan `proof_allowed` atau remaja dengan consent (b)+(d), direkam **tanpa suara**, disimpan di folder privat app (bukan galeri) sampai terunggah ke bucket `brushing_proofs`, lalu dihapus dari HP; server menghapusnya otomatis setelah `limits.proof_retention_days`.
    - Tanpa iklan, tanpa SDK pelacak/advertising ID, tanpa profiling, tanpa lokasi presisi ke server. Analitik hanya agregat anonim & lewat tinjauan.
-   - Mode anak: tanpa akun, tanpa tautan keluar, tanpa input teks bebas.
+   - Mode anak: tanpa tautan keluar, tanpa input teks bebas (kecuali layar masuk akun anak). Akun anak hanya dibuat orang tua (ADR 017); tanpa hasil skrining, foto, rujukan, atau pengaturan.
    - Log & crash report **tanpa PII/foto/teks pengguna** (cek konfigurasi Sentry/dll. sebelum dipasang).
 6. **Maskot dan aset orisinal.**
 7. **Rekomendasi kandungan, bukan merek.** Kandungan/ppm dulu; contoh produk dari `products.json` (≥ 2, netral). Selalu: "Pasta gigi membantu, tetapi tidak menambal gigi berlubang."
@@ -48,7 +48,7 @@ Kamu membangun aplikasi Android (Expo) yang **bekerja penuh tanpa internet**: on
 | PDF rujukan | `expo-print` (HTML → PDF di perangkat) + `expo-sharing` | [PERLU VERIFIKASI] di SDK 57 |
 | Audio | Aset audio ter-bundel (dibuat dari **Azure Speech S0** saat build — ADR 007; bukan Gemini TTS) + `expo-audio`; sertakan `MANIFEST.json` dan label "suara dibuat dengan AI" di layar Tentang | `expo-av` sudah dihapus pada SDK baru — pakai `expo-audio`. Cek ketersediaan suara TTS perangkat sebelum bergantung pada `expo-speech` |
 | Auth & sinkron | **Supabase Auth: email + password** (konfirmasi email aktif; SMTP gratis — ADR 008; **tanpa SMS OTP**; reset password via email; CAPTCHA) + outbox kustom ke Supabase RPC (ADR 005, 008) | PowerSync hanya bila ada kebutuhan sinkron dua arah |
-| Klien data | `@supabase/supabase-js` (auth, RPC, storage). Klien FastAPI hanya bila FastAPI tahap 1 di-deploy | |
+| Klien data | `@supabase/supabase-js` (auth, RPC, storage). Klien FastAPI: hanya `POST /v1/screening/evaluate` sebagai pemeriksaan ulang hasil skrining (ADR 019; `EXPO_PUBLIC_API_BASE_URL`); hasil HP selalu berlaku bila server tidak tersedia | |
 | Uji | Jest + `@testing-library/react-native`, Maestro/Detox untuk alur E2E offline | |
 
 ## 5. Struktur yang disarankan
@@ -98,7 +98,9 @@ Overlay **kotak per temuan** (model v1 = detektor bounding box, ADR 001/003) den
 ### 6.6 Edukasi (chatbot ditunda)
 Kartu edukasi statis dari aset (cara sikat, kapan ke dokter, fluoride, persiapan kunjungan), bersumber pedoman, tanpa input teks bebas (FR-70, P1). **Tidak ada fitur chat/LLM pada MVP.**
 
-### 6.7 Mode kader/guru
+### 6.7 Mode kader/guru — DIHAPUS (ADR 018)
+> Tidak dibangun lagi: peran kader, roster kelas, dan rekap fasilitas dihapus. Bagian di bawah hanya arsip.
+
 Skrining batch satu kelas: daftar murid pseudonim (nomor absen/inisial), antrean foto, rekap kelas per level, ekspor rekap untuk puskesmas, sinkron saat online. Persetujuan orang tua per murid tercatat **sebelum** foto.
 
 ### 6.8 Sinkronisasi & pembaruan
