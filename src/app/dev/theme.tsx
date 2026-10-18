@@ -168,7 +168,7 @@ export default function ThemeGallery() {
         <TextField label={id.auth.email} placeholder={id.auth.emailPlaceholder} />
         <TextField label={id.auth.email} value="nama@" error={id.auth.fieldErrors.emailInvalid} />
         <PasswordField label={id.auth.password} value={password} onChangeText={setPassword} rules={checkPassword(password)} />
-        <Banner tone="info" message={id.common.previewData} />
+        <Banner tone="info" message={id.syncV2.messages.localOnly} />
         <Banner tone="warning" message={id.toothpaste.reviewBanner} />
         <Banner tone="error" message={id.auth.errors.invalidCredentials} />
         <Banner tone="success" message={id.auth.checkEmail.resent} />
