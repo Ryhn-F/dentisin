@@ -2,11 +2,14 @@ import { router } from 'expo-router';
 
 import { ListGroup, ListRow } from '@/components/list-group';
 import { Screen } from '@/components/screen';
+import { useLimits } from '@/core/account/account-store';
 import { useSession } from '@/core/auth/session-store';
 import { id } from '@/core/i18n/id';
+import { useSyncStatus } from '@/core/sync/use-sync-status';
 import { brushingWindows } from '@/domain/brushing-windows';
 
 const t = id.settings;
+const syncLabels = { ...id.components.sync, attention: id.syncV2.status.attention };
 
 export default function Settings() {
   const status = useSession((s) => s.status);
@@ -15,6 +18,9 @@ export default function Settings() {
   const leaveGuest = useSession((s) => s.leaveGuest);
   const guest = status === 'guest';
   const w = brushingWindows;
+  const sync = useSyncStatus();
+  // The streak counts a day with one session of at least streak_min_duration_s (server rule).
+  const streakMinutes = Math.max(1, Math.round(useLimits().streakMinDurationS / 60));
 
   return (
     <Screen>
@@ -42,12 +48,18 @@ export default function Settings() {
         <ListRow icon="wb-sunny" iconTone="sun" title={t.morningWindow} value={`${w.morning.start}–${w.morning.end}`} />
         <ListRow icon="nightlight-round" iconTone="blue" title={t.eveningWindow} value={`${w.evening.start}–${w.evening.end}`} />
         <ListRow icon="public" title={t.timezone} value={t.timezoneValue} />
-        <ListRow icon="local-fire-department" iconTone="coral" title={t.streakRule} value={t.streakRuleValue} />
+        <ListRow icon="local-fire-department" iconTone="coral" title={t.streakRule} value={t.streakRuleValue(streakMinutes)} />
       </ListGroup>
 
       <ListGroup title={t.privacyTitle}>
         <ListRow icon="verified-user" iconTone="mint" title={t.consents} onPress={() => router.push('/profile/consents')} />
-        <ListRow icon="sync" title={t.sync} value={guest ? t.syncLocal : t.syncNotYet} />
+        <ListRow
+          icon="sync"
+          title={t.sync}
+          value={guest ? t.syncLocal : syncLabels[sync]}
+          onPress={() => router.push('/profile/sync')}
+          testID="settings-sync"
+        />
         <ListRow icon="privacy-tip" title={t.privacyNotice} onPress={() => router.push('/privacy')} />
       </ListGroup>
 
