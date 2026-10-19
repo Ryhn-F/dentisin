@@ -7,6 +7,7 @@ import { accountGate } from './features/account-gate';
 import { childAccounts } from './features/child-accounts';
 import { childLogin } from './features/child-login';
 import { consentsV2 } from './features/consents-v2';
+import { deletion } from './features/deletion';
 import { homeV2 } from './features/home-v2';
 import { kid } from './features/kid';
 import { proofs } from './features/proofs';
@@ -40,10 +41,11 @@ export const id = {
 
   // PROPOSAL — level wording needs approval from the supervising dentist (drg).
   levels: {
-    emergency: { label: 'Darurat', advice: 'Segera ke fasilitas kesehatan' },
-    urgent: { label: 'Segera', advice: 'Periksa dalam beberapa hari' },
-    scheduled: { label: 'Terjadwal', advice: 'Buat janji periksa' },
-    routine: { label: 'Rutin', advice: 'Periksa rutin 3–6 bulan' },
+    // Shown as 3 levels: emergency and urgent are both "Segera" (red flag keeps its own card).
+    emergency: { label: 'Segera', advice: 'Bawa ke puskesmas atau IGD hari ini' },
+    urgent: { label: 'Segera', advice: 'Bawa ke dokter gigi dalam 1–3 hari' },
+    scheduled: { label: 'Sedang', advice: 'Lebih rajin sikat gigi dan jaga kebersihan mulut' },
+    routine: { label: 'Baik', advice: 'Sudah cukup bagus, pertahankan!' },
   },
 
   // Legacy consent card copy (component gallery + tests) and the shared row labels. The live
@@ -410,6 +412,13 @@ export const id = {
       callHint: 'Membuka aplikasi telepon',
       callAdult: 'Panggil orang dewasa sekarang.',
       reasonsTitle: 'Kenapa hasilnya begini',
+      redFlagsTitle: 'Tanda bahaya',
+      noRedFlags: 'Tidak ada tanda bahaya dari jawaban pertanyaan.',
+      photoTitle: 'Indikasi dari foto',
+      noPhotoFindings: 'Tidak terlihat tanda yang perlu diperiksa di foto.',
+      photoNotAssessed: 'Foto tidak dinilai.',
+      otherTitle: 'Keluhan dan catatan lain',
+      levelTitle: 'Tingkat hasil',
       adviceTitle: 'Yang perlu dilakukan',
       findingsTitle: 'Tanda di foto',
       findings: {
@@ -472,6 +481,12 @@ export const id = {
     doneShort: 'Sesi dicatat.',
     close: 'Tutup',
     noCamera: 'Mode timer: kamera tidak dipakai.',
+    blocked: {
+      outsideWindow: (morning: string, evening: string) =>
+        `Belum waktunya sikat gigi. Sikat gigi pagi pukul ${morning}, malam pukul ${evening}.`,
+      morningDone: 'Sikat gigi pagi hari ini sudah selesai. Sampai jumpa nanti malam!',
+      eveningDone: 'Sikat gigi malam hari ini sudah selesai. Sampai jumpa besok pagi!',
+    },
     // Four zones, 30 seconds each (2-minute session).
     zoneNow: 'Sekarang sikat',
     zones: ['gigi atas kanan', 'gigi atas kiri', 'gigi bawah kiri', 'gigi bawah kanan'],
@@ -613,6 +628,7 @@ export const id = {
     licensesTitle: 'Lisensi',
     licensesBody: 'Dibuat dengan pustaka sumber terbuka (Expo, React Native, Supabase, dan lainnya; lisensi MIT dan Apache-2.0).',
     fontLicense: 'Huruf Plus Jakarta Sans — SIL Open Font License 1.1.',
+    aiVoice: 'Suara instruksi sikat gigi dibuat dengan AI.',
     devTheme: 'Pratinjau tema (pengembang)',
   },
 
@@ -650,6 +666,7 @@ export const id = {
   proofs,
   timeline,
   syncV2,
+  deletion,
 } as const;
 
 export type Strings = typeof id;

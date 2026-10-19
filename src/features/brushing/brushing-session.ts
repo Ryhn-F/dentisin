@@ -19,6 +19,16 @@ export function zoneForElapsed(elapsedS: number, totalS: number = TARGET_DURATIO
   return Math.min(zones - 1, Math.floor((elapsedS / totalS) * zones));
 }
 
+/** Spoken instruction clips (assets/audio/script.csv, Gemini TTS at build time — ADR 012). */
+export type VoiceCue = 'start' | 'zone2' | 'zone3' | 'zone4' | 'done';
+const ZONE_CUES: readonly VoiceCue[] = ['start', 'zone2', 'zone3', 'zone4'];
+
+/** The instruction that should be heard now; null while idle, starting or paused. */
+export function voiceCueFor(running: boolean, done: boolean, elapsedS: number): VoiceCue | null {
+  if (done) return 'done';
+  return running ? ZONE_CUES[zoneForElapsed(elapsedS)] : null;
+}
+
 /** Seconds left in the session (never negative). */
 export function remainingSeconds(elapsedS: number, totalS: number = TARGET_DURATION_S): number {
   return Math.max(0, totalS - Math.max(0, elapsedS));

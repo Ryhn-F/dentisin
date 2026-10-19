@@ -7,6 +7,7 @@ import {
   proofMimeForUri,
   proofRecordingLimits,
   remainingSeconds,
+  voiceCueFor,
   zoneForElapsed,
 } from '@/features/brushing/brushing-session';
 import { finishBrushingSession, type FinishDeps, type FinishInput, type ProofTarget } from '@/features/brushing/finish-session';
@@ -61,6 +62,12 @@ describe('session helpers (same timing in timer and camera mode)', () => {
     expect(zoneForElapsed(-5)).toBe(0);
     expect(remainingSeconds(45)).toBe(75);
     expect(remainingSeconds(500)).toBe(0);
+  });
+
+  it('voice cue follows the zone while running, says done at the end, and is silent otherwise', () => {
+    expect([0, 30, 60, 90, 119].map((s) => voiceCueFor(true, false, s))).toEqual(['start', 'zone2', 'zone3', 'zone4', 'zone4']);
+    expect(voiceCueFor(false, false, 45)).toBeNull();
+    expect(voiceCueFor(false, true, 12)).toBe('done');
   });
 
   it('derives recorder limits from my_account().limits (max 180 s, a little under the byte limit)', () => {

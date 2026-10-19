@@ -486,9 +486,10 @@ export function handleOutboxNotice(n: OutboxNotice): void {
   if (n.state !== 'applied' && n.state !== 'rejected') return;
   const store = useLocalData.getState();
   if (n.state === 'rejected' && n.code === 'deletion_pending') {
-    // The server stopped taking data for this child (SYNC_EVENTS.md §2): stop queueing it.
+    // The server stopped taking data for this child (SYNC_EVENTS.md §2): stop queueing it and
+    // drop everything still queued for it (consents too: the deletion cannot be undone).
     store.blockChildSync(n.childId, 'deletion_pending');
-    outbox.purgeChildData(n.childId);
+    outbox.purgeChild(n.childId);
     return;
   }
   // entity_conflict: the id already exists under another event id -> it is on the server.

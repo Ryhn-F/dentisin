@@ -38,6 +38,7 @@ export default function About() {
         <ListGroup title={t.licensesTitle}>
           <ListRow icon="code" title={t.licensesBody} />
           <ListRow icon="text-fields" title={t.fontLicense} />
+          <ListRow icon="record-voice-over" title={t.aiVoice} />
         </ListGroup>
 
         {__DEV__ ? (

@@ -42,6 +42,13 @@ jest.mock('expo-video', () => {
   };
 });
 
+// expo-audio: no native player under Jest; useAudioPlayer returns one shared stub so tests can
+// check which clip was played (require() of a .wav resolves to a number under jest-expo).
+jest.mock('expo-audio', () => {
+  const player = { replace: jest.fn(), play: jest.fn(), pause: jest.fn(), release: jest.fn() };
+  return { useAudioPlayer: () => player, __player: player };
+});
+
 // expo-crypto: randomUUID, getRandomValues, and digest from Node (matching native module behaviour).
 jest.mock('expo-crypto', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports

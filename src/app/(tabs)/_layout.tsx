@@ -1,11 +1,12 @@
 import { Tabs } from 'expo-router/js-tabs';
 import { Pressable, View, type GestureResponderEvent } from 'react-native';
+import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { Icon } from '@/components/icon';
 import { tabIcon, useTabScreenOptions } from '@/components/tab-bar';
 import { Text } from '@/components/ui/text';
 import { id } from '@/core/i18n/id';
-import { palette, shadows } from '@/core/theme';
+import { motion, palette, shadows } from '@/core/theme';
 import { cn } from '@/lib/utils';
 
 const CENTER_BUTTON = 64;
@@ -25,6 +26,9 @@ function ScreeningTabButton({
   focused: boolean;
   testID?: string;
 }) {
+  const reduceMotion = useReducedMotion();
+  const scale = useSharedValue(1);
+  const pressStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
   return (
     <Pressable
       testID={testID ?? 'tab-screening'}
@@ -33,17 +37,26 @@ function ScreeningTabButton({
       accessibilityState={{ selected: focused }}
       onPress={onPress ?? undefined}
       onLongPress={onLongPress ?? undefined}
+      // Squeeze on press-in, springy release (same feel as PressableScale).
+      onPressIn={() => {
+        if (!reduceMotion) scale.set(withSpring(0.9, motion.pressSpring));
+      }}
+      onPressOut={() => {
+        if (!reduceMotion) scale.set(withSpring(1, { duration: 400, dampingRatio: 0.5 }));
+      }}
       className="flex-1 items-center"
     >
-      <View
-        className={cn(
-          'items-center justify-center rounded-full border-4 bg-primary',
-          focused ? 'border-sun' : 'border-card',
-        )}
-        style={{ width: CENTER_BUTTON, height: CENTER_BUTTON, marginTop: -32, boxShadow: shadows.button }}
-      >
-        <Icon name="photo-camera" size={28} color={palette.onPrimary} />
-      </View>
+      <Animated.View style={[{ marginTop: -32 }, pressStyle]}>
+        <View
+          className={cn(
+            'items-center justify-center rounded-full border-4 bg-primary',
+            focused ? 'border-sun' : 'border-card',
+          )}
+          style={{ width: CENTER_BUTTON, height: CENTER_BUTTON, boxShadow: shadows.button }}
+        >
+          <Icon name="photo-camera" size={28} color={palette.onPrimary} />
+        </View>
+      </Animated.View>
       <Text
         className="mt-1 text-center font-sans-extrabold"
         style={{ fontSize: 12, lineHeight: 16 }}

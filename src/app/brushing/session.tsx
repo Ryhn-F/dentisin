@@ -3,6 +3,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { Stack, router } from 'expo-router';
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react';
 import { Platform, View, useWindowDimensions } from 'react-native';
+import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Banner } from '@/components/banner';
@@ -15,18 +16,40 @@ import { useSession } from '@/core/auth/session-store';
 import { id } from '@/core/i18n/id';
 import { onPrimaryHeaderOptions, palette, useLightStatusBar } from '@/core/theme';
 import { useLocalData } from '@/data/local-store';
-import { TARGET_DURATION_S, clipSeconds, proofRecordingLimits } from '@/features/brushing/brushing-session';
+import { brushingWindows } from '@/domain/brushing-windows';
+import { brushingBlock, type BrushingBlock } from '@/domain/streak';
+import { TARGET_DURATION_S, clipSeconds, proofRecordingLimits, voiceCueFor } from '@/features/brushing/brushing-session';
 import { cameraAvailability, type CameraUnavailableReason } from '@/features/brushing/camera-availability';
 import { BrushingInstructions } from '@/features/brushing/components/brushing-guide';
 import { CameraStage } from '@/features/brushing/components/camera-stage';
 import { ProofStatus } from '@/features/brushing/components/proof-status';
 import { RecordToggle } from '@/features/brushing/components/record-toggle';
 import { finishBrushingSession, type FinishResult, type ProofTarget, type RecordedClip } from '@/features/brushing/finish-session';
+import { useInstructionVoice } from '@/features/brushing/instruction-voice';
 import { expoProofFiles } from '@/features/brushing/proof-files';
 import { proofCountsToday } from '@/features/brushing/proof-quota';
 import { startProofUploads, useProofUploadStore } from '@/features/brushing/proof-uploads';
+import { mergeBrushing } from '@/features/home/today-brushing';
+import { useTodayBrushing } from '@/features/home/use-home-data';
 
 const t = id.brushing;
+
+// Celebration entrance (rare moment): the mascot pops in with a small overshoot, then the
+// sparkles twinkle in around it. Layout animations follow the OS reduce-motion setting.
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+const mascotIn = new Keyframe({
+  0: { opacity: 0, transform: [{ scale: 0.6 }] },
+  60: { opacity: 1, transform: [{ scale: 1.08 }], easing: EASE_OUT },
+  100: { transform: [{ scale: 1 }] },
+}).duration(500);
+const sparkleIn = new Keyframe({
+  0: { opacity: 0, transform: [{ scale: 0.4 }, { rotate: '-90deg' }] },
+  100: { opacity: 1, transform: [{ scale: 1 }, { rotate: '0deg' }], easing: EASE_OUT },
+}).duration(450);
+const titleIn = new Keyframe({
+  0: { opacity: 0, transform: [{ translateY: 12 }] },
+  100: { opacity: 1, transform: [{ translateY: 0 }], easing: EASE_OUT },
+}).duration(350);
 const r = id.recording;
 const HEADER_BAR = 56;
 /** The camera must report ready within this time, otherwise the session goes on as a timer. */
@@ -69,6 +92,12 @@ const unavailableHint: Partial<Record<CameraUnavailableReason, string>> = {
 function KeepScreenOn() {
   useKeepAwake('brushing-session');
   return null;
+}
+
+function blockedText(block: BrushingBlock): string {
+  const w = brushingWindows;
+  if (block === 'outsideWindow') return t.blocked.outsideWindow(`${w.morning.start}–${w.morning.end}`, `${w.evening.start}–${w.evening.end}`);
+  return t.blocked[block];
 }
 
 function supportsPause(cam: CameraView): boolean {
@@ -121,6 +150,19 @@ export default function BrushingSession() {
   const [toggling, setToggling] = useState(false);
   const [result, setResult] = useState<FinishResult | null>(null);
 
+  const childId = activeChildId ?? (me?.accountType === 'child' ? (me.childAccount?.childId ?? null) : null);
+  // Today's sessions from the server too (brushed on another phone, e.g. the parent's for a
+  // child account): child_history() serves brushing to the owner and to the child account.
+  const remote = sessionStatus === 'signedIn' && !!me && !me.legacy;
+  const todayServer = useTodayBrushing(childId, remote);
+  const refreshToday = todayServer.refresh;
+  useEffect(() => {
+    void refreshToday();
+  }, [refreshToday]);
+  const blockNow = () =>
+    brushingBlock(mergeBrushing(brushingRecords.filter((rec) => rec.childId === childId), todayServer.records));
+  const blocked = phase === 'idle' ? blockNow() : null;
+
   const cameraRef = useRef<CameraView>(null);
   const recRef = useRef<Recording | null>(null);
   const targetRef = useRef<ProofTarget | null>(null);
@@ -153,6 +195,7 @@ export default function BrushingSession() {
   const cameraActive = mode === 'camera' && (phase === 'starting' || phase === 'running' || phase === 'paused');
   // While the recorder writes the file after "done", the camera stays mounted with the same props.
   const showCamera = (cameraActive && !done) || (mode === 'camera' && recording);
+  useInstructionVoice(voiceCueFor(running, done, elapsed));
 
   // Small phones: shrink the ring so ring + zone guide always fit the stage (a bit more while
   // the video switch takes room in the sheet).
@@ -288,7 +331,6 @@ export default function BrushingSession() {
     }
     const clip = rec && !rec.abandoned ? rec.clip : null;
     if (!unmountedRef.current) setRecording(false);
-    const childId = activeChildId ?? (me?.accountType === 'child' ? (me.childAccount?.childId ?? null) : null);
     let outcome: FinishResult;
     try {
       outcome = await finishBrushingSession({
@@ -329,6 +371,8 @@ export default function BrushingSession() {
   }
 
   function onStart() {
+    // The window may have closed while the screen was open.
+    if (blockNow()) return;
     const cameraEligible =
       Platform.OS !== 'web' && !cameraFailed && !(permission && !permission.granted && !permission.canAskAgain);
 
@@ -432,6 +476,7 @@ export default function BrushingSession() {
     if (done) return <Button title={t.close} variant="accent" size="large" onPress={() => router.back()} />;
     switch (phase) {
       case 'idle':
+        if (blocked) return <Button title={t.close} variant="accent" size="large" onPress={() => router.back()} />;
         return <Button testID="brushing-start" title={t.start} icon="play-arrow" variant="accent" size="large" onPress={onStart} />;
       case 'permission':
         return (
@@ -500,13 +545,29 @@ export default function BrushingSession() {
               <Ring color={palette.accent} size={60} thickness={10} style={{ right: 26, top: insets.top + HEADER_BAR + 4 }} />
               {done ? (
                 <View className="items-center gap-3">
-                  <Sparkle color={palette.accent} size={34} style={{ left: -40, top: 10 }} />
-                  <Sparkle color={palette.card} size={22} style={{ right: -30, top: 60 }} />
+                  <Animated.View
+                    entering={sparkleIn.delay(250)}
+                    pointerEvents="none"
+                    style={{ position: 'absolute', left: -40, top: 10 }}
+                  >
+                    <Sparkle color={palette.accent} size={34} style={{ position: 'relative' }} />
+                  </Animated.View>
+                  <Animated.View
+                    entering={sparkleIn.delay(380)}
+                    pointerEvents="none"
+                    style={{ position: 'absolute', right: -30, top: 60 }}
+                  >
+                    <Sparkle color={palette.card} size={22} style={{ position: 'relative' }} />
+                  </Animated.View>
                   {/* Celebration: the one place the mascot floats (rare moment). */}
-                  <Mascot size={200} float />
-                  <Text variant="display" accessibilityRole="header" className="text-center">
-                    {t.doneTitle}
-                  </Text>
+                  <Animated.View entering={mascotIn}>
+                    <Mascot size={200} float />
+                  </Animated.View>
+                  <Animated.View entering={titleIn.delay(150)}>
+                    <Text variant="display" accessibilityRole="header" className="text-center">
+                      {t.doneTitle}
+                    </Text>
+                  </Animated.View>
                 </View>
               ) : (
                 <BrushingInstructions elapsed={elapsed} running={running} ringSize={ringSize} />
@@ -524,7 +585,8 @@ export default function BrushingSession() {
         ) : null}
         {done ? <ProofStatus outcome={result?.proof ?? null} preparing={clipExpected} /> : null}
         {!done && notice ? <Banner testID="brushing-notice" tone="warning" message={noticeText[notice]} /> : null}
-        {phase === 'idle' && availability.available ? (
+        {blocked ? <Banner testID="brushing-blocked" tone="info" message={blockedText(blocked)} /> : null}
+        {phase === 'idle' && !blocked && availability.available ? (
           <RecordToggle
             audience={availability.audience}
             value={recordOn}
@@ -533,7 +595,7 @@ export default function BrushingSession() {
           />
         ) : null}
         {renderControls()}
-        {!done && phase !== 'permission' ? (
+        {!done && phase !== 'permission' && !blocked ? (
           <Text variant="caption" tone="secondary" className="text-center">
             {cameraActive || (phase === 'idle' && recordOn) ? r.noSound : phase === 'idle' && hint ? hint : t.noCamera}
           </Text>

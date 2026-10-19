@@ -445,16 +445,45 @@ export class ProofUploadQueue {
     return state.loading;
   }
 
-  /** Deletes a user's queue and files (account deletion). */
+  /**
+   * Deletes a user's queue and files (account deletion). If it is the current scope, the queue
+   * is emptied and disabled (scope null, as when signed out) so nothing is written for it.
+   */
   async deleteScopeData(userId: string): Promise<void> {
-    if (this.s?.scope === userId) {
+    const s = this.s;
+    if (s?.scope === userId) {
       this.cancelCurrent();
-      this.s.items = [];
-      this.s.writer.cancel();
-      this.emit();
+      s.items = [];
+      const writer = s.writer;
+      writer.cancel();
+      // Nothing is written for this queue any more, not even by an upload still finishing.
+      s.writer = { schedule() {}, cancel() {}, flush: () => writer.flush() };
+      // Resolves once a write that was already running has finished.
+      await this.setScope(null);
     }
     this.files.removeAll(userId);
     await abSlot(PROOF_UPLOADS_STORAGE_PREFIX + userId, this.storage).remove();
+  }
+
+  /**
+   * After a deletion request for one child (the teen's self profile): stops its uploads and
+   * deletes its clips from this phone. Returns how many items were removed.
+   */
+  deleteChildData(childId: string): number {
+    const s = this.s;
+    if (!s) return 0;
+    const id = childId.toLowerCase();
+    const removed = s.items.filter((i) => i.childId === id);
+    if (!removed.length) return 0;
+    if (removed.some((i) => i.state === 'uploading')) this.cancelCurrent();
+    for (const item of removed) {
+      if (item.fileUri) this.files.remove(item.fileUri);
+      item.fileUri = null;
+    }
+    s.items = s.items.filter((i) => i.childId !== id);
+    s.writer.schedule();
+    this.emit();
+    return removed.length;
   }
 
   /**

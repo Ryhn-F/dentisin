@@ -125,8 +125,16 @@ export type LocalDataState = LocalData & {
   setScope: (scope: string | null) => Promise<void>;
   /** Writes pending changes now (app going to the background). */
   flushWrites: () => Promise<void>;
-  /** Deletes a scope's stored data (account deletion); clears memory if it is the current one. */
+  /**
+   * Deletes a scope's stored data (account deletion). If it is the current scope, memory is
+   * cleared and nothing is written for it any more until the scope changes (sign out next).
+   */
   deleteScopeData: (scope: string) => Promise<void>;
+  /**
+   * Removes a child and every local record of it after its deletion was requested. A
+   * 'deletion_pending' marker stays in syncBlocked so the child is never synced or merged back.
+   */
+  forgetChild: (childId: string) => void;
 
   setActiveChild: (id: string) => void;
   /** Adds or replaces a child. Birth/allergy changes are queued as child_upserted (needs consent b). */
@@ -137,7 +145,11 @@ export type LocalDataState = LocalData & {
   ensureSelfProfile: (input: { childId: string; birthYear: number | null; birthMonth: number | null; nickname?: string }) => ChildProfile;
   /** Aligns children with my_account(): child account = its one child; teen = self profile. */
   applyAccount: (me: MyAccount | null) => void;
-  /** Adds list_children() rows unknown locally (empty nickname, server consents). Never deletes. */
+  /**
+   * Adds list_children() rows unknown locally (empty nickname, server consents) unless their
+   * deletion is pending. The only deletion: a child marked deletion_pending that the (complete)
+   * list no longer contains was deleted by the server, so its local copy goes too.
+   */
   mergeServerChildren: (rows: readonly ChildSummary[]) => void;
   /** Records a consent choice (value + text version + time) and queues consent_changed. */
   setConsent: (childId: string, type: ConsentType, value: boolean, options?: { textVersion?: string; at?: string }) => void;
@@ -397,6 +409,26 @@ export function parseStoredData(raw: string): LocalData {
   }
 }
 
+/**
+ * The data without one child: its profile, brushing, screenings, referrals, consents and
+ * unsynced flag. The active child moves to the first remaining one. syncBlocked is kept.
+ */
+export function withoutChild(data: LocalData, childId: string): LocalData {
+  const kids = data.kids.filter((k) => k.id !== childId);
+  const consentRecords = { ...data.consentRecords };
+  delete consentRecords[childId];
+  return {
+    kids,
+    activeChildId: data.activeChildId === childId ? (kids[0]?.id ?? null) : data.activeChildId,
+    brushing: data.brushing.filter((r) => r.childId !== childId),
+    screenings: data.screenings.filter((r) => r.childId !== childId),
+    referrals: data.referrals.filter((r) => r.childId !== childId),
+    consentRecords,
+    unsyncedChildren: data.unsyncedChildren.filter((c) => c !== childId),
+    syncBlocked: data.syncBlocked,
+  };
+}
+
 function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }
@@ -489,14 +521,24 @@ export const useLocalData = create<LocalDataState>((set, get) => {
 
     async deleteScopeData(scope) {
       if (get().scope === scope && handle) {
-        handle.writer.cancel();
+        const h = handle;
+        h.writer.cancel();
+        // Detach: later changes stay in memory and leaving the scope writes nothing back.
+        handle = null;
         set({ ...emptyData(), consents: {} });
+        // A write already running must finish before the copies are removed.
+        await h.writer.flush();
       }
       try {
         await abSlot(LOCAL_STORAGE_PREFIX + scope).remove();
       } catch {
         // Nothing more to do; the next write replaces it.
       }
+    },
+
+    forgetChild(childId) {
+      const s = get();
+      commit({ ...withoutChild(pickData(s), childId), syncBlocked: { ...s.syncBlocked, [childId]: 'deletion_pending' } });
     },
 
     setActiveChild(id) {
@@ -597,8 +639,15 @@ export const useLocalData = create<LocalDataState>((set, get) => {
       // consents would overwrite the stored nicknames, allergies and unsynced consent changes.
       // The pollers merge again on their next run.
       if (!s.ready) return;
-      const kids = [...s.kids];
-      const consentRecords = { ...s.consentRecords };
+      // Deletion finished on the server (requested here or on another phone): drop the local copy.
+      const listed = new Set(rows.map((r) => r.childId));
+      let data = pickData(s);
+      for (const kid of s.kids) {
+        if (s.syncBlocked[kid.id] === 'deletion_pending' && !listed.has(kid.id)) data = withoutChild(data, kid.id);
+      }
+      const removed = data.kids.length !== s.kids.length;
+      const kids = [...data.kids];
+      const consentRecords = { ...data.consentRecords };
       const syncBlocked = { ...s.syncBlocked };
       const now = new Date().toISOString();
       let changed = false;
@@ -609,6 +658,8 @@ export const useLocalData = create<LocalDataState>((set, get) => {
           changed = true;
         }
         const index = kids.findIndex((k) => k.id === row.childId);
+        // A child being deleted is not brought onto this phone (nor back after forgetChild).
+        if (index < 0 && syncBlocked[row.childId] === 'deletion_pending') continue;
         if (index >= 0) {
           if (row.isSelf && !kids[index].isSelf) {
             kids[index] = { ...kids[index], isSelf: true };
@@ -642,6 +693,10 @@ export const useLocalData = create<LocalDataState>((set, get) => {
         for (const t of row.consents) recs[t] = { value: true, textVersion: null, at: now, synced: true };
         consentRecords[row.childId] = recs;
         changed = true;
+      }
+      if (removed) {
+        commit({ ...data, kids, consentRecords, syncBlocked, activeChildId: data.activeChildId ?? kids[0]?.id ?? null });
+        return;
       }
       if (!changed) return;
       commit({ kids, consentRecords, syncBlocked, activeChildId: s.activeChildId ?? kids[0]?.id ?? null });

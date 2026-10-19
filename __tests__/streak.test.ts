@@ -1,7 +1,7 @@
 // Streak math (src/domain/streak.ts): the display helpers (local week, both slots) and the server
 // rule of brushing_streak() used offline (ACCOUNTS_AND_FLOWS.md §2.7).
 import type { BrushingRecord } from '@/domain/models';
-import { computeStreak, currentWeek, dateKeyInZone, localDateKey, slotForTime, streakCount } from '@/domain/streak';
+import { brushingBlock, computeStreak, currentWeek, dateKeyInZone, localDateKey, slotForTime, streakCount } from '@/domain/streak';
 
 function rec(date: Date, slot: BrushingRecord['slot'], durationS = 120): BrushingRecord {
   return {
@@ -56,10 +56,25 @@ describe('display streak (local week, both slots)', () => {
 
   it('derives the slot from the local clock', () => {
     expect(slotForTime(new Date(2026, 9, 9, 6, 0))).toBe('morning');
-    expect(slotForTime(new Date(2026, 9, 9, 9, 59))).toBe('morning');
-    expect(slotForTime(new Date(2026, 9, 9, 10, 0))).toBe('other');
-    expect(slotForTime(new Date(2026, 9, 9, 19, 30))).toBe('evening');
+    expect(slotForTime(new Date(2026, 9, 9, 8, 59))).toBe('morning');
+    expect(slotForTime(new Date(2026, 9, 9, 9, 0))).toBe('other');
+    expect(slotForTime(new Date(2026, 9, 9, 19, 59))).toBe('other');
+    expect(slotForTime(new Date(2026, 9, 9, 20, 0))).toBe('evening');
+    expect(slotForTime(new Date(2026, 9, 9, 22, 59))).toBe('evening');
     expect(slotForTime(new Date(2026, 9, 9, 23, 0))).toBe('other');
+  });
+
+  it('allows one session per window per day, only inside the windows', () => {
+    const day = new Date(2026, 9, 9);
+    const morning = at(day, 0, 7);
+    const evening = at(day, 0, 21);
+    expect(brushingBlock([], at(day, 0, 12))).toBe('outsideWindow');
+    expect(brushingBlock([], morning)).toBeNull();
+    expect(brushingBlock([rec(morning, 'morning')], at(day, 0, 8))).toBe('morningDone');
+    expect(brushingBlock([rec(morning, 'morning')], evening)).toBeNull();
+    expect(brushingBlock([rec(evening, 'evening')], at(day, 0, 22))).toBe('eveningDone');
+    // Yesterday's morning does not block today's.
+    expect(brushingBlock([rec(at(day, 1, 7), 'morning')], morning)).toBeNull();
   });
 });
 

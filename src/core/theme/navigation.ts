@@ -1,13 +1,17 @@
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useState } from 'react';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { palette } from './colors';
 import { fontFamilies } from './typography';
 
 // One header look for every stack (titles come from the navigator, never a hand-rolled <Text>).
 export function useStackScreenOptions() {
+  const reduceMotion = useReducedMotion();
   return {
+    // Push slides in from the side (spatial: deeper = to the right); reduced motion fades.
+    animation: reduceMotion ? 'fade' : 'slide_from_right',
     headerStyle: { backgroundColor: palette.bg },
     headerTintColor: palette.text,
     headerTitleStyle: { fontFamily: fontFamilies.extrabold, fontSize: 18 },

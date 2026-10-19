@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { View } from 'react-native';
 
 import { Screen } from '@/components/screen';
@@ -9,45 +8,24 @@ import { id } from '@/core/i18n/id';
 
 import { FlowProgress } from '@/features/screening/components/flow-progress';
 import { QuestionCard } from '@/features/screening/components/question-card';
-import { isEmergencyAlready, redFlagQuestions } from '@/features/screening/pipeline';
+import { redFlagQuestions } from '@/features/screening/pipeline';
 import { useScreeningSession } from '@/features/screening/session-store';
 import { useEnsureSession } from '@/features/screening/use-ensure-session';
 
 const t = id.screening;
 
 // Step 1: red-flag questions (rules.json, group "red_flag"), always before any photo.
-// A red flag goes straight to the result (emergency) — the photo is not needed.
+// A red flag no longer ends the flow (ADR 021): every step still runs and the result shows it.
 export default function RedFlagQuestions() {
   useEnsureSession();
   const answers = useScreeningSession((s) => s.answers);
   const setAnswer = useScreeningSession((s) => s.setAnswer);
-  const finish = useScreeningSession((s) => s.finish);
-  const [busy, setBusy] = useState(false);
   const missing = redFlagQuestions.filter((q) => answers[q.id] === undefined).length;
-
-  async function next() {
-    if (!isEmergencyAlready(answers, null)) {
-      router.push('/screening/symptoms');
-      return;
-    }
-    setBusy(true);
-    try {
-      await finish('red_flag');
-      router.push('/screening/result');
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <Screen testID="screening-questions">
       <FlowProgress step={1} />
-      <View className="gap-1">
-        <Text variant="body">{t.redFlags.intro}</Text>
-        <Text variant="caption" tone="secondary">
-          {t.adultNote}
-        </Text>
-      </View>
+      <Text variant="body">{t.redFlags.intro}</Text>
 
       <View className="gap-4">
         {redFlagQuestions.map((q, i) => (
@@ -74,8 +52,7 @@ export default function RedFlagQuestions() {
           iconRight="arrow-forward"
           size="large"
           disabled={missing > 0}
-          loading={busy}
-          onPress={next}
+          onPress={() => router.push('/screening/symptoms')}
         />
       </View>
     </Screen>

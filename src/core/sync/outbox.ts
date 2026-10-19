@@ -421,14 +421,22 @@ export class Outbox {
     return this.s?.loading ?? Promise.resolve();
   }
 
-  /** Deletes a user's stored queue (account deletion). Clears memory too if it is the current scope. */
+  /**
+   * Deletes a user's stored queue (account deletion). If it is the current scope, the queue is
+   * emptied and disabled (scope null, as when signed out) so nothing is sent or written for it.
+   */
   async deleteScopeData(userId: string): Promise<void> {
-    if (this.s?.scope === userId) {
-      this.s.entries = [];
-      this.s.applied.clear();
-      this.s.given.clear();
-      this.s.writer.cancel();
-      this.emitStatus();
+    const s = this.s;
+    if (s?.scope === userId) {
+      s.entries = [];
+      s.applied.clear();
+      s.given.clear();
+      const writer = s.writer;
+      writer.cancel();
+      // Nothing is written for this queue any more, not even by a batch still in flight.
+      s.writer = { schedule() {}, cancel() {}, flush: () => writer.flush() };
+      // Resolves once a write that was already running has finished.
+      await this.setScope(null);
     }
     await abSlot(OUTBOX_STORAGE_PREFIX + userId, this.storage).remove();
   }
@@ -578,6 +586,15 @@ export class Outbox {
    */
   purgeChildData(childId: string): number {
     return this.removeWhere((e) => e.childId === childId && e.type !== 'consent_changed' && e.state !== 'inflight');
+  }
+
+  /**
+   * After a deletion request for a child: drops EVERY queued event of the child (consents too;
+   * one already in flight cannot be recalled, the server refuses it) and its given-up refs.
+   */
+  purgeChild(childId: string): number {
+    this.forgetGivenUp((g) => g.childId === childId);
+    return this.removeWhere((e) => e.childId === childId && e.state !== 'inflight');
   }
 
   // ----- observation ---------------------------------------------------------------------------

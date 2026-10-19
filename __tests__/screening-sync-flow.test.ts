@@ -190,7 +190,7 @@ describe('screening_recorded', () => {
       screening_id: record.id,
       child_id: CHILD,
       request_id: REQUEST,
-      level: 'yellow',
+      level: 'green',
       red_flag: false,
       findings: [],
       model_version: '0.0.0-none',
@@ -241,7 +241,8 @@ describe('screening_recorded', () => {
 describe('referral_created', () => {
   it('is recorded once per screening, behind the screening event', async () => {
     await guardianWithChild();
-    const record = await screen();
+    // A white spot keeps the level above routine, so a referral exists.
+    const record = await screen({ answers: { ...allNo(), white_spot: 'yes' } });
     const first = ensureReferral(record.id);
     const second = ensureReferral(record.id);
     expect(first).not.toBeNull();

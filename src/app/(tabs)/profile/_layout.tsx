@@ -13,6 +13,7 @@ export default function ProfileLayout() {
       <Stack.Screen name="settings" options={{ title: id.settings.title }} />
       <Stack.Screen name="consents" options={{ title: id.consentsV2.title }} />
       <Stack.Screen name="sync" options={{ title: id.syncV2.title }} />
+      <Stack.Screen name="delete" options={{ title: id.deletion.title }} />
       <Stack.Screen name="about" options={{ ...onPrimaryHeaderOptions, title: id.about.title }} />
     </Stack>
   );

@@ -17,7 +17,7 @@ import { Text, TextClassContext } from '@/components/ui/text';
 import { useMe } from '@/core/account/account-store';
 import { useSession } from '@/core/auth/session-store';
 import { id } from '@/core/i18n/id';
-import { palette, shadows, useTheme } from '@/core/theme';
+import { palette, shadows, useTheme, useIsScreenFocused } from '@/core/theme';
 import { weekDots } from '@/features/home/streak';
 import { useForegroundPoll } from '@/features/home/use-foreground-poll';
 import { useBrushingStreak, useKidRequests, type KidRequestsState } from '@/features/home/use-home-data';
@@ -65,6 +65,7 @@ function KidRequests({ state }: { state: KidRequestsState }) {
 // brushing, "Gigiku sakit", and the child's own requests (status only). Grade-4 words. Never
 // shows screening results, photos, referrals, settings or deletion: the guardian screens.
 export function KidHomeScreen() {
+  const focused = useIsScreenFocused();
   const { touch } = useTheme();
   const me = useMe();
   const status = useSession((s) => s.status);
@@ -115,7 +116,7 @@ export function KidHomeScreen() {
           <View className="flex-row items-center justify-between">
             <View className="gap-2">
               <Text variant="label">{t.streakTitle}</Text>
-              <StreakCounter count={streak.streak.current} />
+              <StreakCounter count={streak.streak.current} active={focused} />
             </View>
             <Mascot size={96} withBrush mood={streak.streak.todayDone ? 'wow' : 'happy'} />
           </View>

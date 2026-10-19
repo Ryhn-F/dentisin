@@ -1,5 +1,5 @@
 // Screening flow logic, pure and testable. Order follows backend/api/docs/API.md §12 and
-// app/CLAUDE.md §3.3: questionnaire -> red flags short-circuit -> photo -> quality gate ->
+// app/CLAUDE.md §3.3: questionnaire -> photo (red flags no longer short-circuit, ADR 021) -> quality gate ->
 // detector (DentisAI API, ADR 020) -> triage. Every level comes from the triage engine; this
 // file only decides which step comes next and assembles the engine input.
 import {
@@ -17,8 +17,6 @@ import type { Detection } from '@/ml/detector';
 export const redFlagQuestions = triageRules.questions.filter((q) => q.group === 'red_flag');
 export const symptomQuestions = triageRules.questions.filter((q) => q.group !== 'red_flag');
 
-const topLevel = triageRules.levels.reduce((a, b) => (b.rank > a.rank ? b : a)).id;
-
 export type Pain = number | 'unknown';
 export type Answers = Partial<Record<string, Answer>>;
 
@@ -32,23 +30,6 @@ export function ageInMonths(birthYear: number | null, birthMonth: number | null,
 
 export function allAnswered(answers: Answers, questions = triageRules.questions): boolean {
   return questions.every((q) => answers[q.id] !== undefined);
-}
-
-/**
- * True when the answers so far already reach the top level (emergency) whatever comes next.
- * Unanswered questions count as "no" and missing pain as 0 — the lowest possible inputs — and
- * the engine is monotone in answers (no <= unknown <= yes) and pain (backend property tests),
- * so an emergency here stays an emergency. Detections can never lower the level either, so the
- * photo is skipped (same short-circuit as /v1/screening/analyze).
- */
-export function isEmergencyAlready(answers: Answers, pain: Pain | null): boolean {
-  const lowest = withLowestForUnasked(answers, pain);
-  const out = evaluate(
-    triageRules,
-    { detections: [], photo_status: 'not_taken', symptoms: lowest.answers, age_months: null, pain: lowest.pain },
-    triageParams,
-  );
-  return out.level === topLevel;
 }
 
 /**

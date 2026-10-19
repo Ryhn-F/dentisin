@@ -1,8 +1,9 @@
+import { useEffect } from 'react';
 import { View, type ColorValue } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { fontFamilies, palette, shadows } from '@/core/theme';
-import { cn } from '@/lib/utils';
+import { fontFamilies, motion, palette, shadows } from '@/core/theme';
 
 import { Icon, type IconName } from './icon';
 
@@ -11,11 +12,24 @@ import { Icon, type IconName } from './icon';
 // bottom safe-area inset is added by hand.
 export const TAB_BAR_HEIGHT = 80;
 
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
 export function tabIcon(name: IconName) {
   return function TabIcon({ focused, color }: { focused: boolean; color: ColorValue }) {
-    // Active tab: bold blue pill behind a white icon (design reference 1, M3 indicator).
+    // Active tab: bold blue pill behind a white icon (design reference 1, M3 indicator);
+    // the pill grows out from the icon when the tab becomes active.
+    const reduceMotion = useReducedMotion();
+    const on = useSharedValue(focused ? 1 : 0);
+    useEffect(() => {
+      const target = focused ? 1 : 0;
+      on.set(reduceMotion ? target : withTiming(target, { duration: motion.fast, easing: EASE_OUT }));
+    }, [focused, reduceMotion, on]);
+    const pillStyle = useAnimatedStyle(() => ({ opacity: on.get(), transform: [{ scaleX: 0.5 + on.get() * 0.5 }] }));
     return (
-      <View className={cn('h-9 w-14 items-center justify-center rounded-full', focused && 'bg-primary')}>
+      <View className="h-9 w-14 items-center justify-center">
+        <Animated.View
+          style={[{ position: 'absolute', inset: 0, borderRadius: 999, backgroundColor: palette.primary }, pillStyle]}
+        />
         <Icon name={name} size={24} color={focused ? palette.onPrimary : color} />
       </View>
     );
@@ -26,6 +40,8 @@ export function tabIcon(name: IconName) {
 export function useTabScreenOptions() {
   const insets = useSafeAreaInsets();
   return {
+    // Tabs are peers: a short crossfade, never a slide.
+    animation: 'fade' as const,
     tabBarActiveTintColor: palette.primary,
     tabBarInactiveTintColor: palette.textSecondary,
     // The keyboard must not lift the tab bar over form fields.

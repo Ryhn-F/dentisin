@@ -8,7 +8,7 @@ import { Screen } from '@/components/screen';
 import { TextField } from '@/components/text-field';
 import { Button } from '@/components/ui/button';
 import { Text } from '@/components/ui/text';
-import { useCapabilities } from '@/core/account/account-store';
+import { useCapabilities, useMe } from '@/core/account/account-store';
 import { id } from '@/core/i18n/id';
 import { newChildId, useLocalData } from '@/data/local-store';
 import { allergenCodes, type AllergenCode } from '@/domain/models';
@@ -64,6 +64,8 @@ function ChildEditorForm({ childId }: { childId: string }) {
     }, [showAccount, isNew, reloadSummaries]),
   );
   const accountStatus = childAccountStatus(summaries.rows[childId]);
+  // Deleting one child's data is a guardian action (a teen deletes the own profile in Pengaturan).
+  const canDelete = useMe()?.accountType === 'guardian' && !isNew && !!existing && existing.isSelf !== true;
 
   const [nickname, setNickname] = useState(existing?.nickname ?? '');
   const [birthMonth, setBirthMonth] = useState<number | null>(existing?.birthMonth ?? null);
@@ -175,6 +177,18 @@ function ChildEditorForm({ childId }: { childId: string }) {
       ) : null}
 
       <Button title={id.common.save} variant="accent" size="large" onPress={onSave} />
+
+      {canDelete ? (
+        <ListGroup>
+          <ListRow
+            testID="child-delete-row"
+            icon="person-remove"
+            title={id.deletion.settings.childRow}
+            destructive
+            onPress={() => router.push({ pathname: '/profile/delete', params: { scope: 'child', child: childId } })}
+          />
+        </ListGroup>
+      ) : null}
     </Screen>
   );
 }

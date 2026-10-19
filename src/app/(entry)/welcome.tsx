@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +12,7 @@ import { useSession } from '@/core/auth/session-store';
 import { isSupabaseConfigured } from '@/core/config';
 import { id } from '@/core/i18n/id';
 import { palette, useIsScreenFocused, useLightStatusBar } from '@/core/theme';
+import { useDeletionNotice } from '@/features/deletion/notice';
 
 const t = id.auth;
 
@@ -19,6 +21,9 @@ const t = id.auth;
 export default function Welcome() {
   const insets = useSafeAreaInsets();
   const continueAsGuest = useSession((s) => s.continueAsGuest);
+  // Set by an account deletion right before it signed out; shown until this screen goes away.
+  const accountDeleted = useDeletionNotice((s) => s.accountDeleted);
+  useEffect(() => () => useDeletionNotice.getState().dismiss(), []);
   useLightStatusBar();
   // The float animation stops while Login/Register cover this screen.
   const focused = useIsScreenFocused();
@@ -55,6 +60,9 @@ export default function Welcome() {
           {t.welcomeBody}
         </Text>
         {!isSupabaseConfigured ? <Banner tone="info" message={t.notConfiguredBanner} /> : null}
+        {accountDeleted ? (
+          <Banner tone="success" title={id.deletion.done.accountTitle} message={id.deletion.done.account} testID="welcome-account-deleted" />
+        ) : null}
         <Button title={t.signIn} variant="accent" size="large" onPress={() => router.push('/login')} />
         <Button title={t.signUp} variant="secondary" onPress={() => router.push('/register')} />
         <Button title={t.useWithoutAccount} variant="ghost" onPress={() => continueAsGuest()} />

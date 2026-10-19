@@ -8,11 +8,20 @@ import { id } from '@/core/i18n/id';
 import { useLocalData } from '@/data/local-store';
 import { DEFAULT_LIMITS, emptyConsentState, type MyAccount } from '@/domain/models';
 
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const voice = require('expo-audio').__player as { play: jest.Mock; replace: jest.Mock };
+
 // ---------------------------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------------------------
 
 const granted = { granted: true, canAskAgain: true, status: 'granted', expires: 'never' };
+let mockTodayServer: Record<string, unknown>[] = [];
+jest.mock('@/features/home/use-home-data', () => ({
+  useTodayBrushing: () => ({ records: mockTodayServer, refresh: mockTodayRefresh }),
+}));
+const mockTodayRefresh = jest.fn(async () => undefined);
+
 const mockCam = {
   permission: granted as Record<string, unknown> | null,
   request: jest.fn(),
@@ -172,7 +181,10 @@ async function flush() {
 }
 
 beforeEach(() => {
-  jest.useFakeTimers({ now: new Date('2026-10-18T07:00:00Z') });
+  voice.play.mockClear();
+  voice.replace.mockClear();
+  // 07:00 local: inside the morning window, whatever the machine's time zone.
+  jest.useFakeTimers({ now: new Date(2026, 9, 18, 7, 0) });
   mockCam.permission = granted;
   mockCam.pauseSupported = false;
   mockCam.request.mockReset().mockResolvedValue(granted);
@@ -189,6 +201,7 @@ beforeEach(() => {
   mockUpload = null;
   mockUploadItems = [];
   useLocalData.setState({ brushing: [] });
+  mockTodayServer = [];
 });
 
 afterEach(async () => {
@@ -208,16 +221,21 @@ describe('BrushingSession: timer mode (unchanged)', () => {
     expect(screen.getByText(t.noCamera)).toBeTruthy();
     expect(screen.queryByTestId('record-toggle')).toBeNull();
 
+    expect(voice.play).not.toHaveBeenCalled();
     await fireEvent.press(screen.getByText(t.start));
     expect(screen.getByText(t.pause)).toBeTruthy();
+    expect(voice.play).toHaveBeenCalledTimes(1);
     await tick(31);
     expect(screen.getByText('1:29')).toBeTruthy();
     expect(screen.getByText(`${t.zoneNow} ${t.zones[1]}`)).toBeTruthy();
     expect(screen.queryByTestId('camera-view')).toBeNull();
+    expect(voice.play).toHaveBeenCalledTimes(2);
 
     await tick(89);
     await flush();
     expect(screen.getByText(t.doneTitle)).toBeTruthy();
+    // start, zone 2, zone 3, zone 4, done: each instruction read once (cue order: voiceCueFor test).
+    expect(voice.play).toHaveBeenCalledTimes(5);
     expect(mockFinish).toHaveBeenCalledTimes(1);
     expect(mockFinish).toHaveBeenCalledWith(expect.objectContaining({ childId: CHILD, elapsedS: 120, clip: null, target: null }));
   });
@@ -231,10 +249,68 @@ describe('BrushingSession: timer mode (unchanged)', () => {
     await tick(5);
     expect(screen.getByText('1:48')).toBeTruthy();
     expect(screen.getByText(t.resume)).toBeTruthy();
+    await fireEvent.press(screen.getByText(t.resume));
+    expect(voice.play).toHaveBeenCalledTimes(1); // resuming does not repeat the instruction
+    await fireEvent.press(screen.getByText(t.pause));
     await fireEvent.press(screen.getByText(t.finishEarly));
     await flush();
+    expect(voice.play).toHaveBeenCalledTimes(2);
     expect(mockFinish).toHaveBeenCalledWith(expect.objectContaining({ elapsedS: 12, clip: null }));
     expect(screen.getByText(t.doneTitle)).toBeTruthy();
+  });
+});
+
+describe('BrushingSession: brushing windows', () => {
+  const morningRecord = {
+    id: 'm1',
+    childId: CHILD,
+    startedAt: new Date(2026, 9, 18, 6, 30).toISOString(),
+    durationS: 120,
+    spiritScore: null,
+    slot: 'morning' as const,
+    cameraMode: false,
+    synced: false,
+    proofId: null,
+  };
+
+  it('morning already brushed today: no start, a notice and a close button', async () => {
+    guest();
+    useLocalData.setState({ brushing: [morningRecord] });
+    await renderScreen();
+    expect(screen.getByText(t.blocked.morningDone)).toBeTruthy();
+    expect(screen.queryByTestId('brushing-start')).toBeNull();
+    expect(screen.getByText(t.close)).toBeTruthy();
+  });
+
+  it("another child's morning session does not block this child", async () => {
+    guest();
+    useLocalData.setState({ brushing: [{ ...morningRecord, childId: 'someone-else' }] });
+    await renderScreen();
+    expect(screen.getByTestId('brushing-start')).toBeTruthy();
+  });
+
+  it('morning brushed on another phone (server) also blocks', async () => {
+    signIn(teenAccount(), SELF);
+    mockTodayServer = [{ ...morningRecord, id: 'srv1', childId: SELF, synced: true }];
+    await renderScreen();
+    expect(screen.getByText(t.blocked.morningDone)).toBeTruthy();
+    expect(screen.queryByTestId('brushing-start')).toBeNull();
+  });
+
+  it("child account: the parent's morning session on the server blocks the child's phone", async () => {
+    signIn(childAccount(), CHILD);
+    mockTodayServer = [{ ...morningRecord, id: 'srv2', synced: true }];
+    await renderScreen();
+    expect(screen.getByText(t.blocked.morningDone)).toBeTruthy();
+    expect(screen.queryByTestId('brushing-start')).toBeNull();
+  });
+
+  it('outside both windows: no start', async () => {
+    jest.setSystemTime(new Date(2026, 9, 18, 14, 0));
+    guest();
+    await renderScreen();
+    expect(screen.getByTestId('brushing-blocked')).toBeTruthy();
+    expect(screen.queryByTestId('brushing-start')).toBeNull();
   });
 });
 
@@ -337,7 +413,7 @@ describe('BrushingSession: camera mode', () => {
         startedAt: '2026-10-18T01:00:00Z',
         durationS: 120,
         spiritScore: null,
-        slot: 'morning',
+        slot: 'other', // not a window slot, so only the proof quota applies
         cameraMode: true,
         synced: false,
         proofId: `aaaaaaaa-0000-4000-8000-00000000000${n}`,

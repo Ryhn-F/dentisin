@@ -9,7 +9,6 @@ import { triageRules, type Answer } from '@/domain/triage';
 import {
   ageInMonths,
   buildTriageInput,
-  isEmergencyAlready,
   redFlagQuestions,
   runTriage,
   symptomQuestions,
@@ -53,15 +52,6 @@ describe('pipeline', () => {
     expect(ageInMonths(null, 3, now)).toBeNull();
     expect(ageInMonths(2027, 1, now)).toBeNull();
     expect(ageInMonths(1990, 1, now)).toBeNull();
-  });
-
-  it('short-circuits on a red flag (yes or unknown) but not on "no" answers', () => {
-    const redOnly = (answer: Answer) => Object.fromEntries(redFlagQuestions.map((q, i) => [q.id, i === 3 ? answer : 'no']));
-    expect(isEmergencyAlready(redOnly('yes'), null)).toBe(true);
-    // Today's cautious params: an unknown red flag is treated as emergency.
-    expect(isEmergencyAlready(redOnly('unknown'), null)).toBe(true);
-    expect(isEmergencyAlready(redOnly('no'), null)).toBe(false);
-    expect(isEmergencyAlready(allNo(), 0)).toBe(false);
   });
 
   it('fills only unasked questions with the lowest values', () => {
@@ -131,19 +121,19 @@ describe('session store', () => {
     useScreeningSession.getState().reset();
   });
 
-  it('a skipped photo never yields routine and is saved locally without a photo', async () => {
+  it('a skipped photo with no complaints is routine (ADR 021) and is saved locally without a photo', async () => {
     useScreeningSession.getState().start(child, new Date(2026, 9, 11));
     answerAll(allNo(), 0);
     const outcome = await useScreeningSession.getState().finish('skip');
     expect(outcome.kind).toBe('result');
     if (outcome.kind !== 'result') return;
-    expect(outcome.output.level).toBe('scheduled');
+    expect(outcome.output.level).toBe('routine');
     expect(outcome.output.reasons.map((r) => r.id)).toContain('CTX_PHOTO_NOT_ASSESSED');
     expect(outcome.output.advice_ids).toEqual(expect.arrayContaining(['ADV_DISCLAIMER_NOT_DIAGNOSIS', 'ADV_REFERRAL_CTA']));
     const s = useScreeningSession.getState();
     expect(s.saveState).toBe('saved');
     const [record] = useLocalData.getState().screenings;
-    expect(record).toMatchObject({ childId: child.id, level: 'scheduled', photoTaken: false, photoStatus: 'not_taken', findings: [] });
+    expect(record).toMatchObject({ childId: child.id, level: 'routine', photoTaken: false, photoStatus: 'not_taken', findings: [] });
     expect(JSON.stringify(record)).not.toMatch(/file:|uri/);
   });
 
@@ -166,7 +156,7 @@ describe('session store', () => {
     answerAll(allNo(), 0);
     s.setCapture({ uri: 'mem://photo', width: 640, height: 480, pixels, upload }, passed);
     const outcome = await useScreeningSession.getState().finish('not_sent');
-    expect(outcome.kind === 'result' && outcome.output.level).toBe('scheduled');
+    expect(outcome.kind === 'result' && outcome.output.level).toBe('routine');
     const after = useScreeningSession.getState();
     expect(after.analysis).toEqual({ photoStatus: 'not_taken', detections: [], modelVersion: null });
     expect(after.upload).toBeNull();

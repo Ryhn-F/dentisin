@@ -24,6 +24,7 @@ Required by `app/CLAUDE.md` §3.11 (closed repo, permissive licenses only; no AG
 | expo-image | 57.0.5 | MIT |
 | expo-image-manipulator | 57.0.21 | MIT — crop, re-encode (drops EXIF), downscale |
 | expo-keep-awake | 57.0.2 | MIT |
+| expo-audio | 57.0.5 | MIT — plays the bundled brushing instruction clips (ADR 012) |
 | expo-linking | 57.0.12 | MIT |
 | expo-router | 57.0.25 | MIT |
 | expo-secure-store | 57.0.4 | MIT |

@@ -51,7 +51,7 @@ describe('UI strings (src/core/i18n/id.ts)', () => {
     const keys = new Set(strings.map(([key]) => key.split('.')[0]));
     for (const name of [
       'registerFlow', 'teenSetup', 'childLogin', 'accountGate', 'homeV2', 'kid', 'childAccounts',
-      'consentsV2', 'requests', 'screeningSync', 'recording', 'proofs', 'timeline', 'syncV2',
+      'consentsV2', 'requests', 'screeningSync', 'recording', 'proofs', 'timeline', 'syncV2', 'deletion',
     ]) {
       expect(keys).toContain(name);
     }

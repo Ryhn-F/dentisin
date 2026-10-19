@@ -16,9 +16,8 @@ const config: ExpoConfig = {
     // PROPOSAL — confirm before the first store/EAS build; cannot change after publishing.
     package: 'dev.ryhnfir.dentisai',
     adaptiveIcon: {
-      backgroundColor: '#FFFDF8',
-      foregroundImage: './assets/images/android-icon-foreground.png',
       backgroundImage: './assets/images/android-icon-background.png',
+      foregroundImage: './assets/images/android-icon-foreground.png',
       monochromeImage: './assets/images/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
@@ -56,7 +55,7 @@ const config: ExpoConfig = {
       {
         backgroundColor: '#FFFDF8',
         image: './assets/images/splash-icon.png',
-        imageWidth: 76,
+        imageWidth: 200,
       },
     ],
   ],

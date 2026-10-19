@@ -24,7 +24,7 @@ import { useSession } from '@/core/auth/session-store';
 import { flags } from '@/core/flags';
 import { id } from '@/core/i18n/id';
 import { useSyncStatus } from '@/core/sync/use-sync-status';
-import { palette } from '@/core/theme';
+import { palette, useIsScreenFocused } from '@/core/theme';
 import { useLocalData } from '@/data/local-store';
 import { brushingWindows } from '@/domain/brushing-windows';
 import { currentWeek } from '@/domain/streak';
@@ -147,6 +147,7 @@ function HomeBannerView({ banner }: { banner: HomeBanner }) {
 // videos), polled while the screen is shown (ACCOUNTS_AND_FLOWS.md §2.5). Teen: the app is
 // for the teen's own teeth: no child switcher, no add-child, "Video sikat gigiku".
 export default function Home() {
+  const focused = useIsScreenFocused();
   const insets = useSafeAreaInsets();
   const sync = useSyncStatus();
   const status = useSession((s) => s.status);
@@ -246,7 +247,7 @@ export default function Home() {
           <View className="flex-row items-center justify-between">
             <View className="gap-2">
               <Text variant="label">{t.streakTitle}</Text>
-              <StreakCounter count={streak.streak.current} />
+              <StreakCounter count={streak.streak.current} active={focused} />
             </View>
             <Mascot size={104} withBrush />
           </View>

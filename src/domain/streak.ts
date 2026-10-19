@@ -20,14 +20,26 @@ export function localDateKey(date: Date): string {
 }
 
 /**
- * Slot of a session from the local clock: morning 06:00-10:00, evening 19:00-23:00, else
- * other (mirrors brushingWindows; PLACEHOLDER windows until the brushing rules ship).
+ * Slot of a session from the local clock: morning 06:00-09:00, evening 20:00-23:00, else
+ * other (mirrors brushingWindows).
  */
 export function slotForTime(date: Date): BrushingSlot {
   const h = date.getHours();
-  if (h >= 6 && h < 10) return 'morning';
-  if (h >= 19 && h < 23) return 'evening';
+  if (h >= 6 && h < 9) return 'morning';
+  if (h >= 20 && h < 23) return 'evening';
   return 'other';
+}
+
+export type BrushingBlock = 'outsideWindow' | 'morningDone' | 'eveningDone';
+
+/**
+ * Why a new session cannot start now, or null: brushing is only open in the two windows and
+ * once per window per day. `records` must be one child's sessions.
+ */
+export function brushingBlock(records: readonly BrushingRecord[], now = new Date()): BrushingBlock | null {
+  const slot = slotForTime(now);
+  if (slot === 'other') return 'outsideWindow';
+  return slotsByDay(records).get(localDateKey(now))?.[slot] ? `${slot}Done` : null;
 }
 
 function slotsByDay(records: readonly BrushingRecord[]) {

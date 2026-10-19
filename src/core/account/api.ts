@@ -1,5 +1,5 @@
 // Typed client for the account model v2 backend (ADR 017/018):
-// - RPCs: backend/docs/api/ACCOUNTS_AND_FLOWS.md §2–4, §7 and SUPABASE_API.md §3.7
+// - RPCs: backend/docs/api/ACCOUNTS_AND_FLOWS.md §2–4, §7, §9 and SUPABASE_API.md §3.2, §3.7
 // - Storage bucket brushing_proofs: SUPABASE_API.md §4
 // - Edge Functions child-accounts / child-login: EDGE_FUNCTIONS_AND_HOOKS.md §1.5–1.7
 //
@@ -573,6 +573,34 @@ export function deleteBrushingProof(proofId: string): Promise<ApiResult<ProofDel
   return callRpc('delete_brushing_proof', { p_proof: proofId }, (data) => {
     const o = obj(data);
     return { id: uuid(o, 'id'), status: oneOf(o, 'status', proofStatuses), deletedAt: timeOrNull(o, 'deleted_at') };
+  });
+}
+
+/** deletion_scope enum of request_deletion (SUPABASE_API.md §3.2). */
+export const deletionScopes = ['child', 'account'] as const;
+export type DeletionScope = (typeof deletionScopes)[number];
+
+/** What to delete: one own child (guardian) / the teen's self profile, or the whole account. */
+export type DeletionTarget = { scope: 'child'; childId: string } | { scope: 'account' };
+
+/**
+ * request_deletion(p_scope, p_child_id) (SUPABASE_API.md §3.2, ACCOUNTS_AND_FLOWS.md §9):
+ * resolves to the deletion_request id. Sync for the subject stops at once (deletion_pending);
+ * the server finishes within hours (pg_cron, process-deletion for photos and proof videos).
+ * - child: the profile and all its data, its child login account, brushing proof videos and
+ *   screening requests.
+ * - account: every child, child account and proof, the roles, the ledger and the auth account.
+ * Idempotent: a pending/processing request for the same subject returns its existing id.
+ * Errors: forbidden (not the caller's child, or a child account calling), invalid_argument
+ * (child_id_not_allowed_for_account_scope), not_authenticated. Never logs.
+ */
+export function requestDeletion(target: DeletionTarget): Promise<ApiResult<string>> {
+  if (target.scope === 'child' && !isUuid(target.childId)) return Promise.resolve(fail('invalid_argument'));
+  if (!(deletionScopes as readonly string[]).includes(target.scope)) return Promise.resolve(fail('invalid_argument'));
+  const args = target.scope === 'child' ? { p_scope: 'child', p_child_id: target.childId.toLowerCase() } : { p_scope: 'account' };
+  return callRpc('request_deletion', args, (data) => {
+    if (!isUuid(data)) throw new BadResponse('request_deletion');
+    return data.toLowerCase();
   });
 }
 

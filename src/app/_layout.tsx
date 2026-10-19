@@ -23,6 +23,7 @@ import { startProofUploads } from '@/features/brushing/proof-uploads';
 // signed-in user's or guest's local data, so screens never flash another scope's empty state).
 // Never waits for the network (app_plan.md §4.1).
 SplashScreen.preventAutoHideAsync().catch(() => {});
+SplashScreen.setOptions({ duration: 300, fade: true });
 
 function RootStack() {
   const screenOptions = useStackScreenOptions();
