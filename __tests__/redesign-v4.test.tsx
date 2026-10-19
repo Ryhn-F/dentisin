@@ -9,7 +9,7 @@ import { setStorageBackendForTests, type KeyValueBackend } from '@/core/auth/sec
 import { id } from '@/core/i18n/id';
 import { usePrefs } from '@/core/prefs';
 import { ThemeProvider } from '@/core/theme';
-import { useMockData } from '@/mock/store';
+import { useLocalData } from '@/data/local-store';
 
 type StyledNode = {
   props: { style?: unknown; jestInlineStyle?: unknown };
@@ -94,11 +94,11 @@ describe('ScreeningCard', () => {
   });
 });
 
-describe('mock store', () => {
+describe('local store', () => {
   it('starts every consent off for a new child', () => {
     // Plain store call: nothing is rendered, so no act() is needed.
-    useMockData.getState().upsertChild({ id: 'test-child', nickname: 'Uji', birthYear: null, birthMonth: null, allergies: [] });
-    expect(useMockData.getState().consents['test-child']).toEqual({ a: false, b: false, c: false });
+    useLocalData.getState().upsertChild({ id: 'test-child', nickname: 'Uji', birthYear: null, birthMonth: null, allergies: [] });
+    expect(useLocalData.getState().consents['test-child']).toEqual({ a: false, b: false, c: false, d: false });
   });
 });
 

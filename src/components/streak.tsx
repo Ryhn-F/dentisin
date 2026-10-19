@@ -1,7 +1,19 @@
+import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 
 import { id } from '@/core/i18n/id';
-import { palette } from '@/core/theme';
+import { motion, palette } from '@/core/theme';
 import { cn } from '@/lib/utils';
 
 import { Icon } from './icon';
@@ -20,8 +32,61 @@ export type StreakDay = {
   isFuture?: boolean;
 };
 
+const FLICKER_MS = 700;
+const EASE_IN_OUT = Easing.bezier(0.45, 0, 0.55, 1);
+
+// Lit flame: a slow flicker (scale + sway from the base) while the screen is visible, and a
+// bump when the count goes up. Decorative only; reduced motion keeps it still.
+function Flame({ count, active }: { count: number; active: boolean }) {
+  const reduceMotion = useReducedMotion();
+  const flicker = useSharedValue(0);
+  const bump = useSharedValue(1);
+  const prevCount = useRef(count);
+
+  useEffect(() => {
+    if (!active || reduceMotion || count === 0) return;
+    flicker.set(
+      withRepeat(
+        withSequence(
+          withTiming(1, { duration: FLICKER_MS, easing: EASE_IN_OUT }),
+          withTiming(-1, { duration: FLICKER_MS, easing: EASE_IN_OUT }),
+        ),
+        -1,
+        true,
+      ),
+    );
+    // Endless loops must stop when the screen is covered, or they keep the UI thread busy.
+    return () => {
+      cancelAnimation(flicker);
+      flicker.set(0);
+    };
+  }, [active, reduceMotion, count, flicker]);
+
+  useEffect(() => {
+    if (count > prevCount.current && !reduceMotion) {
+      bump.set(withSequence(withTiming(1.25, { duration: motion.fast }), withSpring(1, { duration: 400, dampingRatio: 0.5 })));
+    }
+    prevCount.current = count;
+  }, [count, reduceMotion, bump]);
+
+  const style = useAnimatedStyle(() => {
+    const f = flicker.get();
+    return {
+      transformOrigin: 'bottom',
+      transform: [{ scale: bump.get() }, { scaleY: 1 + Math.abs(f) * 0.08 }, { rotate: `${f * 4}deg` }],
+    };
+  });
+
+  return (
+    <Animated.View style={style}>
+      <Icon name="local-fire-department" size={36} color={palette.coral} />
+    </Animated.View>
+  );
+}
+
 // Designed to sit on the blue streak card (white text passes AA on primary).
-export function StreakCounter({ count }: { count: number }) {
+// `active`: the hosting screen is focused (animation runs only then).
+export function StreakCounter({ count, active = false }: { count: number; active?: boolean }) {
   return (
     <View
       accessible
@@ -30,7 +95,7 @@ export function StreakCounter({ count }: { count: number }) {
       className="flex-row items-center gap-3"
     >
       <View className="size-16 items-center justify-center rounded-full bg-sun">
-        <Icon name="local-fire-department" size={36} color={palette.coral} />
+        <Flame count={count} active={active} />
       </View>
       <View>
         <Text variant="hero" tone="onPrimary" style={{ lineHeight: 54 }}>

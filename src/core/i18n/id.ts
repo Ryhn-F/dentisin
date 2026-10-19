@@ -1,5 +1,23 @@
 // All user-facing strings (Bahasa Indonesia). This file is scanned by
 // __tests__/forbidden-phrases.test.ts — never put UI text inline in components.
+// Account model v2 features keep their strings in ./features/*.ts (one module per feature so
+// parallel work never edits the same file); they are mounted below as id.<name>.
+
+import { accountGate } from './features/account-gate';
+import { childAccounts } from './features/child-accounts';
+import { childLogin } from './features/child-login';
+import { consentsV2 } from './features/consents-v2';
+import { deletion } from './features/deletion';
+import { homeV2 } from './features/home-v2';
+import { kid } from './features/kid';
+import { proofs } from './features/proofs';
+import { recording } from './features/recording';
+import { registerFlow } from './features/register-flow';
+import { requests } from './features/requests';
+import { screeningSync } from './features/screening-sync';
+import { syncV2 } from './features/sync-v2';
+import { teenSetup } from './features/teen-setup';
+import { timeline } from './features/timeline';
 
 export const id = {
   appName: 'DentisAI',
@@ -12,8 +30,6 @@ export const id = {
     back: 'Kembali',
     close: 'Tutup',
     soon: 'Segera hadir',
-    previewData: 'Pratinjau dengan data contoh. Data asli tersimpan setelah fitur penyimpanan aktif.',
-    sampleData: 'Data contoh',
     minutesSeconds: (s: number) => `${Math.floor(s / 60)} menit ${String(s % 60).padStart(2, '0')} detik`,
   },
 
@@ -25,13 +41,15 @@ export const id = {
 
   // PROPOSAL — level wording needs approval from the supervising dentist (drg).
   levels: {
-    emergency: { label: 'Darurat', advice: 'Segera ke fasilitas kesehatan' },
-    urgent: { label: 'Segera', advice: 'Periksa dalam beberapa hari' },
-    scheduled: { label: 'Terjadwal', advice: 'Buat janji periksa' },
-    routine: { label: 'Rutin', advice: 'Periksa rutin 3–6 bulan' },
+    // Shown as 3 levels: emergency and urgent are both "Segera" (red flag keeps its own card).
+    emergency: { label: 'Segera', advice: 'Bawa ke puskesmas atau IGD hari ini' },
+    urgent: { label: 'Segera', advice: 'Bawa ke dokter gigi dalam 1–3 hari' },
+    scheduled: { label: 'Sedang', advice: 'Lebih rajin sikat gigi dan jaga kebersihan mulut' },
+    routine: { label: 'Baik', advice: 'Sudah cukup bagus, pertahankan!' },
   },
 
-  // Three separate consents, all default off (app/CLAUDE.md §3.5).
+  // Legacy consent card copy (component gallery + tests) and the shared row labels. The live
+  // (a)-(d) texts are in id.consentsV2 / id.teenSetup (ADR 017).
   consent: {
     storeLocal: {
       title: 'Simpan hasil di HP ini',
@@ -39,13 +57,6 @@ export const id = {
       why: 'Supaya riwayat bisa dilihat lagi tanpa internet.',
       where: 'Hanya di HP ini.',
       ifDeclined: 'Skrining tetap bisa dipakai, tetapi riwayat tidak disimpan.',
-    },
-    technicalData: {
-      title: 'Kirim data tanpa identitas ke server',
-      what: 'Usia, alergi, catatan sikat gigi, dan hasil skrining dengan kode acak. Tanpa nama dan tanpa foto.',
-      why: 'Supaya data bisa dipulihkan dan dilihat di HP lain.',
-      where: 'Server di Singapura.',
-      ifDeclined: 'Semua fitur tetap bisa dipakai. Data hanya ada di HP ini.',
     },
     uploadPhoto: {
       title: 'Unggah foto gigi',
@@ -87,7 +98,7 @@ export const id = {
       offline: 'Offline',
       local: 'Hanya di HP ini',
     },
-    childSwitcher: { label: 'Pilih anak' },
+    childSwitcher: { label: 'Pilih anak', unnamed: 'Anak' },
   },
 
   nav: {
@@ -133,6 +144,8 @@ export const id = {
       lower: 'Ada huruf kecil',
       upper: 'Ada huruf besar',
       digit: 'Ada angka',
+      maxBytes: 'Tidak lebih dari 72 huruf',
+      noControl: 'Tanpa tanda tersembunyi',
     },
     fieldErrors: {
       emailRequired: 'Isi alamat email.',
@@ -260,16 +273,12 @@ export const id = {
     screening: {
       title: 'Skrining foto gigi',
       description: 'Foto gigi depan dengan senter untuk melihat tanda yang perlu diperiksa.',
-      status: 'Menunggu pengesahan dokter gigi',
     },
-    classMode: { title: 'Mode kelas', description: 'Untuk kader dan guru UKS: skrining satu kelas.' },
-    awaitingReview: 'Menunggu pengesahan dokter gigi',
   },
 
   screening: {
     title: 'Skrining gigi',
     heroBody: 'Foto gigi depan anak dengan bantuan senter. DentisAI menandai bagian yang perlu diperiksa dokter gigi.',
-    statusSoon: 'Segera hadir',
     waitingTitle: 'Sedang disiapkan',
     waitingBody:
       'Skrining foto dibuka setelah aturan dan hasilnya disahkan dokter gigi. Sambil menunggu, jaga kebiasaan sikat gigi anak.',
@@ -282,8 +291,8 @@ export const id = {
       { title: 'Foto gigi dengan senter', body: 'Aplikasi memandu posisi dan memeriksa apakah fotonya cukup jelas.' },
       { title: 'Lihat hasil dan saran', body: 'Hasilnya berupa indikasi, dengan saran kapan perlu ke dokter gigi.' },
     ],
-    privacyTitle: 'Foto tetap di HP ini',
-    privacyBody: 'Foto diperiksa langsung di HP, tanpa internet, dan tidak dikirim ke mana pun.',
+    privacyTitle: 'Foto hanya untuk pemeriksaan',
+    privacyBody: 'Foto dikirim ke server DentisAI untuk diperiksa, tidak disimpan di server, dan dihapus dari HP setelah skrining selesai.',
 
     // Flow (feature flag `medical_modules` on).
     startTitle: 'Siap mulai?',
@@ -295,7 +304,7 @@ export const id = {
     noChildBody: 'Skrining tetap bisa dipakai, tetapi usia tidak ikut dinilai dan hasil tidak disimpan.',
     addChild: 'Tambah anak',
     ageUnknown: 'Usia anak belum diisi. Hasil foto akan dianggap belum teruji untuk usia ini.',
-    draftTitle: 'Mode uji internal',
+
     adultNote: 'Pertanyaan diisi oleh orang tua atau guru.',
     stepOf: (n: number, total: number) => `Langkah ${n} dari ${total}`,
     answers: { yes: 'Ya', no: 'Tidak', unknown: 'Tidak tahu' },
@@ -333,7 +342,10 @@ export const id = {
         'Sikat gigi dulu supaya sisa makanan tidak menutupi gigi.',
         'Kalau gigi basah dan silau, lap pelan dengan tisu bersih.',
       ],
-      privacy: 'Foto hanya diperiksa di HP ini, tidak dikirim, dan dihapus setelah skrining selesai.',
+      privacy: 'Foto dikirim ke server DentisAI untuk diperiksa, tidak disimpan di server, dan dihapus dari HP setelah skrining selesai.',
+      needsServerTitle: 'Pemeriksaan foto butuh akun dan izin kirim data',
+      needsServerBody:
+        'Foto diperiksa oleh server DentisAI. Masuk ke akun, lalu nyalakan izin "Kirim data" untuk anak ini di Profil. Sementara itu, lanjutkan tanpa foto.',
       openCamera: 'Buka kamera',
       skipPhoto: 'Lewati foto',
       skipHint: 'Tanpa foto, hasil hanya dari jawaban pertanyaan.',
@@ -361,7 +373,7 @@ export const id = {
       close: 'Tutup kamera',
       starting: 'Menyalakan kamera…',
       permissionTitle: 'Izinkan kamera',
-      permissionBody: 'DentisAI butuh kamera untuk memotret gigi. Foto tidak keluar dari HP ini.',
+      permissionBody: 'DentisAI butuh kamera untuk memotret gigi. Foto hanya dikirim ke server DentisAI untuk diperiksa.',
       permissionAction: 'Izinkan kamera',
       permissionSettings: 'Buka pengaturan',
       permissionDenied: 'Izin kamera ditolak. Nyalakan izin kamera untuk DentisAI di pengaturan HP.',
@@ -386,7 +398,10 @@ export const id = {
       continueWithout: 'Lanjut tanpa foto',
       continueHint: 'Hasil hanya dari jawaban. Sebaiknya gigi diperiksa langsung oleh dokter gigi.',
       attempt: (n: number) => `Percobaan ke-${n}`,
-      placeholderNote: 'Pemeriksaan kejelasan foto masih memakai batas sementara.',
+      sendFailedTitle: 'Foto belum terkirim',
+      sendFailedBody: 'Periksa sambungan internet, lalu coba lagi.',
+      retrySend: 'Coba kirim lagi',
+      continueNotSent: 'Lanjut tanpa foto',
     },
     analyzing: 'Menyiapkan hasil…',
     result: {
@@ -397,6 +412,13 @@ export const id = {
       callHint: 'Membuka aplikasi telepon',
       callAdult: 'Panggil orang dewasa sekarang.',
       reasonsTitle: 'Kenapa hasilnya begini',
+      redFlagsTitle: 'Tanda bahaya',
+      noRedFlags: 'Tidak ada tanda bahaya dari jawaban pertanyaan.',
+      photoTitle: 'Indikasi dari foto',
+      noPhotoFindings: 'Tidak terlihat tanda yang perlu diperiksa di foto.',
+      photoNotAssessed: 'Foto tidak dinilai.',
+      otherTitle: 'Keluhan dan catatan lain',
+      levelTitle: 'Tingkat hasil',
       adviceTitle: 'Yang perlu dilakukan',
       findingsTitle: 'Tanda di foto',
       findings: {
@@ -405,14 +427,13 @@ export const id = {
       },
       findingCheck: 'Perlu diperiksa dokter gigi',
       photoWithFindings: (n: number) => `Foto gigi dengan ${n} tanda yang perlu diperiksa`,
-      noDetectorTitle: 'Foto belum dinilai',
-      noDetectorBody: 'Pemeriksaan foto otomatis belum tersedia di versi ini. Hasil di bawah hanya dari jawaban pertanyaan.',
+      photoNotSent: 'Foto tidak terkirim. Hasil hanya dari jawaban pertanyaan.',
       photoSkipped: 'Foto tidak diambil. Hasil hanya dari jawaban pertanyaan.',
       photoFailed: 'Foto belum cukup jelas untuk dinilai. Hasil hanya dari jawaban pertanyaan.',
       redFlagNoPhoto: 'Ada tanda bahaya, jadi foto tidak diperlukan.',
       referralAction: 'Buat surat rujukan',
       done: 'Selesai',
-      saved: 'Hasil disimpan di Riwayat (hanya di HP ini, tanpa foto).',
+      saved: 'Hasil disimpan di Riwayat (tanpa foto).',
       notSavedNoConsent: 'Hasil tidak disimpan karena belum ada persetujuan "Simpan hasil di HP ini".',
       notSavedNoChild: 'Hasil tidak disimpan karena belum memilih profil anak.',
       rulesVersion: (v: string) => `Versi aturan ${v}`,
@@ -436,8 +457,8 @@ export const id = {
       none: 'Tidak ada',
       pain: 'Skor sakit',
       photo: 'Foto',
-      photoAssessed: 'Dinilai di HP',
-      photoNotAssessed: 'Diambil, belum dinilai otomatis',
+      photoAssessed: 'Dinilai server DentisAI',
+      photoNotSent: 'Diambil, tidak terkirim',
       photoNotTaken: 'Tidak diambil',
       photoQualityFailed: 'Kurang jelas',
       show: 'Tunjukkan layar ini ke petugas kesehatan.',
@@ -460,6 +481,12 @@ export const id = {
     doneShort: 'Sesi dicatat.',
     close: 'Tutup',
     noCamera: 'Mode timer: kamera tidak dipakai.',
+    blocked: {
+      outsideWindow: (morning: string, evening: string) =>
+        `Belum waktunya sikat gigi. Sikat gigi pagi pukul ${morning}, malam pukul ${evening}.`,
+      morningDone: 'Sikat gigi pagi hari ini sudah selesai. Sampai jumpa nanti malam!',
+      eveningDone: 'Sikat gigi malam hari ini sudah selesai. Sampai jumpa besok pagi!',
+    },
     // Four zones, 30 seconds each (2-minute session).
     zoneNow: 'Sekarang sikat',
     zones: ['gigi atas kanan', 'gigi atas kiri', 'gigi bawah kiri', 'gigi bawah kanan'],
@@ -493,20 +520,13 @@ export const id = {
     segmentBrushing: 'Sikat gigi',
     segmentScreening: 'Skrining',
     segmentReferral: 'Rujukan',
-    weekSummary: 'Minggu ini',
-    completeDays: (n: number) => `${n} dari 7 hari lengkap`,
-    averageDuration: (s: number) => `Rata-rata ${Math.floor(s / 60)} menit ${String(s % 60).padStart(2, '0')} detik`,
     slotMorning: 'Pagi',
     slotEvening: 'Malam',
     slotOther: 'Di luar jadwal',
     synced: 'Tersinkron',
     notSynced: 'Belum sinkron',
-    emptyBrushingTitle: 'Belum ada catatan sikat gigi',
-    emptyBrushingBody: 'Catatan muncul setelah sesi sikat gigi pertama.',
-    emptyScreeningTitle: 'Belum ada skrining',
     emptyScreeningBody: 'Skrining foto gigi tersedia setelah disahkan dokter gigi.',
     emptyScreeningAction: 'Tentang skrining',
-    emptyScreeningBodyActive: 'Hasil skrining yang disimpan muncul di sini.',
     emptyScreeningActionActive: 'Mulai skrining',
     screeningPhoto: {
       assessed: 'Foto dinilai',
@@ -514,12 +534,6 @@ export const id = {
       not_taken: 'Tanpa foto',
       quality_failed: 'Foto kurang jelas',
     },
-    detailReasons: 'Alasan',
-    detailPhoto: 'Foto',
-    detailRules: 'Versi aturan',
-    openReferral: 'Lihat surat rujukan',
-    emptyReferralTitle: 'Belum ada surat rujukan',
-    emptyReferralBody: 'Surat rujukan dibuat dari hasil skrining.',
     detailTitle: 'Detail',
     detailDate: 'Tanggal',
     detailTime: 'Jam',
@@ -538,8 +552,8 @@ export const id = {
     guestBody: 'Data hanya ada di HP ini. Masuk untuk menyimpan cadangan.',
     guestAction: 'Masuk atau daftar',
     roleGuardian: 'Orang tua',
-    roleKader: 'Kader',
-    roleFacility: 'Petugas puskesmas',
+    roleTeen: 'Remaja',
+    roleChild: 'Akun anak',
     roleAdmin: 'Admin',
     kidsTitle: 'Anak saya',
     kidsFooter: 'Nama panggilan hanya tersimpan di HP ini.',
@@ -575,13 +589,6 @@ export const id = {
     },
   },
 
-  consents: {
-    title: 'Persetujuan data',
-    intro: (name: string) => `Persetujuan untuk ${name}. Setiap pilihan terpisah dan bisa diubah kapan saja.`,
-    photoHidden: 'Unggah foto belum tersedia sampai ada izin komite etik.',
-    noChild: 'Tambah profil anak dulu.',
-  },
-
   settings: {
     title: 'Pengaturan akun',
     accountTitle: 'Akun',
@@ -596,12 +603,11 @@ export const id = {
     timezone: 'Zona waktu',
     timezoneValue: 'WIB (Asia/Jakarta)',
     streakRule: 'Hitungan streak',
-    streakRuleValue: 'Pagi dan malam',
+    streakRuleValue: (minutes: number) => `Tiap hari, minimal ${minutes} menit`,
     privacyTitle: 'Data dan privasi',
     consents: 'Persetujuan data',
     sync: 'Sinkronisasi',
     syncLocal: 'Hanya di HP ini',
-    syncNotYet: 'Belum aktif',
     privacyNotice: 'Pemberitahuan privasi',
     deleteTitle: 'Hapus data',
     deleteChild: 'Hapus data anak',
@@ -622,6 +628,7 @@ export const id = {
     licensesTitle: 'Lisensi',
     licensesBody: 'Dibuat dengan pustaka sumber terbuka (Expo, React Native, Supabase, dan lainnya; lisensi MIT dan Apache-2.0).',
     fontLicense: 'Huruf Plus Jakarta Sans — SIL Open Font License 1.1.',
+    aiVoice: 'Suara instruksi sikat gigi dibuat dengan AI.',
     devTheme: 'Pratinjau tema (pengembang)',
   },
 
@@ -643,6 +650,23 @@ export const id = {
     buttonLoading: 'Menyimpan',
     buttonDisabled: 'Belum bisa',
   },
+
+  // Account model v2 feature modules (./features).
+  registerFlow,
+  teenSetup,
+  childLogin,
+  accountGate,
+  homeV2,
+  kid,
+  childAccounts,
+  consentsV2,
+  requests,
+  screeningSync,
+  recording,
+  proofs,
+  timeline,
+  syncV2,
+  deletion,
 } as const;
 
 export type Strings = typeof id;

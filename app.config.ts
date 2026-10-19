@@ -16,13 +16,13 @@ const config: ExpoConfig = {
     // PROPOSAL — confirm before the first store/EAS build; cannot change after publishing.
     package: 'dev.ryhnfir.dentisai',
     adaptiveIcon: {
-      backgroundColor: '#FFFDF8',
-      foregroundImage: './assets/images/android-icon-foreground.png',
       backgroundImage: './assets/images/android-icon-background.png',
+      foregroundImage: './assets/images/android-icon-foreground.png',
       monochromeImage: './assets/images/android-icon-monochrome.png',
     },
     predictiveBackGestureEnabled: false,
-    // Photos stay in the app's private cache (never the gallery) and nothing records audio.
+    // Photos and proof clips stay in app-private storage (never the gallery); nothing records
+    // audio (proof videos are recorded muted, ADR 017 consent d).
     blockedPermissions: [
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.WRITE_EXTERNAL_STORAGE',
@@ -38,11 +38,13 @@ const config: ExpoConfig = {
     'expo-router',
     // Supabase session + no-account flag in the Android Keystore.
     'expo-secure-store',
-    // Still photos for screening only: no microphone permission, no barcode scanner (smaller APK).
+    // Still photos for screening and muted brushing proof videos (ADR 017/018, consent d): no
+    // microphone permission, no barcode scanner (smaller APK).
     [
       'expo-camera',
       {
-        cameraPermission: 'DentisAI memakai kamera untuk memotret gigi. Foto diperiksa di HP ini saja.',
+        cameraPermission:
+          'DentisAI memakai kamera untuk memotret gigi dan, bila diizinkan, merekam video sikat gigi tanpa suara. Foto diperiksa di HP ini saja.',
         microphonePermission: false,
         recordAudioAndroid: false,
         barcodeScannerEnabled: false,
@@ -53,7 +55,7 @@ const config: ExpoConfig = {
       {
         backgroundColor: '#FFFDF8',
         image: './assets/images/splash-icon.png',
-        imageWidth: 76,
+        imageWidth: 200,
       },
     ],
   ],

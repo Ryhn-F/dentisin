@@ -3,12 +3,12 @@
 // come from the rules file via the stored triage output.
 import type { TriageLevel } from '@/core/theme';
 import type { ScreeningRecord } from '@/domain/models';
-import type { Answer } from '@/domain/triage';
+import type { Answer, PhotoStatus } from '@/domain/triage';
 
 import type { Pain } from './pipeline';
 import type { PhotoChoice } from './session-store';
 
-export type ReferralPhoto = 'assessed' | 'not_assessed' | 'not_taken' | 'quality_failed';
+export type ReferralPhoto = 'assessed' | 'not_sent' | 'not_taken' | 'quality_failed';
 
 export type ReferralData = {
   screenedAt: string;
@@ -22,16 +22,18 @@ export type ReferralData = {
   rulesVersion: string;
 };
 
-export function photoFromSession(choice: PhotoChoice | null, detectorAvailable: boolean): ReferralPhoto {
-  if (choice === 'use') return detectorAvailable ? 'assessed' : 'not_assessed';
+/** `photoStatus` is what the server reported for the photo (`quality_failed` from its own gate). */
+export function photoFromSession(choice: PhotoChoice | null, photoStatus: PhotoStatus | null): ReferralPhoto {
+  if (choice === 'use') return photoStatus === 'quality_failed' ? 'quality_failed' : 'assessed';
   if (choice === 'quality_failed') return 'quality_failed';
+  if (choice === 'not_sent') return 'not_sent';
   return 'not_taken';
 }
 
 export function photoFromRecord(r: Pick<ScreeningRecord, 'photoTaken' | 'photoStatus'>): ReferralPhoto {
   if (r.photoStatus === 'assessed') return 'assessed';
   if (r.photoStatus === 'quality_failed') return 'quality_failed';
-  return r.photoTaken ? 'not_assessed' : 'not_taken';
+  return r.photoTaken ? 'not_sent' : 'not_taken';
 }
 
 export function referralFromRecord(r: ScreeningRecord, childName: string | null): ReferralData {

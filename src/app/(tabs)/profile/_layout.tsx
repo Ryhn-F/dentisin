@@ -9,8 +9,11 @@ export default function ProfileLayout() {
     <Stack screenOptions={screenOptions}>
       <Stack.Screen name="index" options={{ ...onPrimaryHeaderOptions, title: id.profile.title }} />
       <Stack.Screen name="child/[id]" options={{ title: id.child.editTitle }} />
+      <Stack.Screen name="child-account/[id]" options={{ title: id.childAccounts.title }} />
       <Stack.Screen name="settings" options={{ title: id.settings.title }} />
-      <Stack.Screen name="consents" options={{ title: id.consents.title }} />
+      <Stack.Screen name="consents" options={{ title: id.consentsV2.title }} />
+      <Stack.Screen name="sync" options={{ title: id.syncV2.title }} />
+      <Stack.Screen name="delete" options={{ title: id.deletion.title }} />
       <Stack.Screen name="about" options={{ ...onPrimaryHeaderOptions, title: id.about.title }} />
     </Stack>
   );

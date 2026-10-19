@@ -1,46 +1,80 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { View } from 'react-native';
 
 import { HeroHeader } from '@/components/hero-header';
 import type { IconTileTone } from '@/components/icon-tile';
 import { ListGroup, ListRow } from '@/components/list-group';
+import { Icon } from '@/components/icon';
 import { Mascot } from '@/components/mascot';
 import { Screen } from '@/components/screen';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Text } from '@/components/ui/text';
+import { useCapabilities, useMe } from '@/core/account/account-store';
 import { useSession } from '@/core/auth/session-store';
 import { id } from '@/core/i18n/id';
-import { useUiMode } from '@/core/theme';
-import type { AppRole } from '@/domain/models';
-import { useMockData } from '@/mock/store';
+import { palette, useUiMode } from '@/core/theme';
+import { useLocalData } from '@/data/local-store';
+import type { MyAccount } from '@/domain/models';
+import { childAccountStatus, childAccountStatusLabel, kidLabel } from '@/features/child-accounts/logic';
+import { useChildSummaries } from '@/features/child-accounts/use-child-summaries';
 import { ageInYears } from '@/ui/format';
 
 const t = id.profile;
+const tc = id.childAccounts.list;
 const kidTones: IconTileTone[] = ['sun', 'coral', 'mint', 'lavender'];
 
-// The most specific role wins the badge (an account can hold several).
-const rolePriority: AppRole[] = ['admin', 'facility_viewer', 'kader', 'guardian'];
-const roleLabel: Record<AppRole, string> = {
-  admin: t.roleAdmin,
-  facility_viewer: t.roleFacility,
-  kader: t.roleKader,
-  guardian: t.roleGuardian,
-};
+// Badge from my_account() (ADR 017/018): admin wins; otherwise the account type. Teens hold
+// the 'guardian' role too (for their self profile), so the type decides "Remaja".
+function badgeLabel(me: MyAccount | null): string {
+  if (me?.roles.includes('admin')) return t.roleAdmin;
+  if (me?.accountType === 'teen') return t.roleTeen;
+  if (me?.accountType === 'child') return t.roleChild;
+  return t.roleGuardian;
+}
 
-function badgeRole(roles: readonly AppRole[]): AppRole {
-  // Every account gets 'guardian' at sign-up (backend signup trigger).
-  return rolePriority.find((r) => roles.includes(r)) ?? 'guardian';
+// Status pill + chevron at the end of a child row (the pill says if the child has a login).
+function KidAccessory({ label }: { label: string | null }) {
+  return (
+    <View className="flex-row items-center gap-2">
+      {label ? (
+        <View className="rounded-full bg-tint-sky px-3 py-1" testID="kid-status-chip">
+          <Text variant="caption">{label}</Text>
+        </View>
+      ) : null}
+      <View className="size-8 items-center justify-center rounded-full bg-tint-lavender">
+        <Icon name="chevron-right" size={22} color={palette.primary} />
+      </View>
+    </View>
+  );
 }
 
 export default function Profile() {
   const { mode, setMode } = useUiMode();
   const status = useSession((s) => s.status);
   const email = useSession((s) => s.email);
-  const roles = useSession((s) => s.roles);
+  const me = useMe();
   const leaveGuest = useSession((s) => s.leaveGuest);
-  const kids = useMockData((s) => s.kids);
+  const allKids = useLocalData((s) => s.kids);
+  const caps = useCapabilities();
+  const summaries = useChildSummaries();
   const guest = status === 'guest';
+  const teen = me?.accountType === 'teen';
+
+  // Pick up child-account changes made on the detail screen when coming back here.
+  const reload = summaries.reload;
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
+
+  // A teen only has the own profile. "Tambah anak" is for guests (local only) and for guardians
+  // who may create child accounts; a guardian on a backend without ADR 017 (legacy) keeps it too,
+  // otherwise that dev backend could not add children at all. Teens never add children.
+  const kids = teen ? allKids.filter((k) => k.isSelf === true || k.id === me?.selfChildId) : allKids;
+  const canAdd = guest || (!teen && (caps.createChildAccounts || (me?.accountType === 'guardian' && me.legacy === true)));
 
   return (
     <Screen flush>
@@ -58,7 +92,7 @@ export default function Profile() {
             ) : (
               <View className="self-start rounded-full bg-sun px-3 py-1">
                 <Text variant="label" tone="onAccent">
-                  {roleLabel[badgeRole(roles)]}
+                  {badgeLabel(me)}
                 </Text>
               </View>
             )}
@@ -68,22 +102,29 @@ export default function Profile() {
       </HeroHeader>
 
       <View className="gap-6 px-5">
-        <ListGroup title={t.kidsTitle} footer={t.kidsFooter}>
+        <ListGroup title={t.kidsTitle} footer={teen ? tc.teenFooter : t.kidsFooter}>
           {kids.map((kid, i) => {
             const age = ageInYears(kid.birthYear, kid.birthMonth);
             const born = kid.birthYear && kid.birthMonth ? t.born(id.months[kid.birthMonth - 1], kid.birthYear) : null;
+            const name = kidLabel(kid, allKids.indexOf(kid));
+            const chip = teen || guest ? null : childAccountStatusLabel(childAccountStatus(summaries.rows[kid.id]));
             return (
               <ListRow
                 key={kid.id}
+                testID={`kid-row-${kid.id}`}
                 icon="face"
                 iconTone={kidTones[i % kidTones.length]}
-                title={kid.nickname}
+                title={name}
                 subtitle={[age === null ? t.ageUnknown : t.age(age), born].filter(Boolean).join(' · ')}
+                accessibilityLabel={[chip ? tc.chipLabel(name, chip) : name, age === null ? t.ageUnknown : t.age(age)].join(', ')}
+                accessory={<KidAccessory label={chip} />}
                 onPress={() => router.push(`/profile/child/${kid.id}`)}
               />
             );
           })}
-          <ListRow icon="add" iconTone="blue" title={t.addChild} onPress={() => router.push('/profile/child/new')} />
+          {canAdd ? (
+            <ListRow testID="add-child" icon="add" iconTone="blue" title={t.addChild} onPress={() => router.push('/profile/child/new')} />
+          ) : null}
         </ListGroup>
 
         <ListGroup title={t.displayTitle}>

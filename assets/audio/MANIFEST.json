@@ -1,0 +1,65 @@
+{
+  "schema_version": 2,
+  "provider": "gemini",
+  "model": "gemini-3.8-flash-tts",
+  "voice": "Kore",
+  "output_format": "wav-pcm-s16le-24000hz-mono",
+  "generated_at": "2026-10-19T04:38:35Z",
+  "generated_under": "free",
+  "ai_voice_label_required": true,
+  "ai_voice_disclosure_required": true,
+  "script_sha256": "f06490c9c56ba8ba2fb1240ec36a869bfb1d36650140ea0a198617181e5fe6ad",
+  "complete": true,
+  "files": [
+    {
+      "id": "brushing.start",
+      "file": "brushing.start.wav",
+      "text": "Ayo mulai! Sikat semua bagian gigi pelan-pelan. Sekarang sikat gigi atas kanan.",
+      "approved_by": "pemilik-produk-2026-10-19",
+      "input_sha256": "2b84ef211d6094ffe59dae399723b855087a2bd5691abceee6898ddda3e88739",
+      "sha256": "028ea84214c26789b7723ce08a3ac4775ebb11ee907686f632e4ce4e918ae7ea",
+      "bytes": 372834,
+      "generated_at": "2026-10-19T04:36:14Z"
+    },
+    {
+      "id": "brushing.zone2",
+      "file": "brushing.zone2.wav",
+      "text": "Sekarang sikat gigi atas kiri.",
+      "approved_by": "pemilik-produk-2026-10-19",
+      "input_sha256": "ab986ef1de157907752957111a01794a436093fbda1718f338e0ae02c8674b51",
+      "sha256": "129533fc3c4bc992a299111c648a4c63d3d6792d332dd0630c1642409af03025",
+      "bytes": 142434,
+      "generated_at": "2026-10-19T04:36:14Z"
+    },
+    {
+      "id": "brushing.zone3",
+      "file": "brushing.zone3.wav",
+      "text": "Sekarang sikat gigi bawah kiri.",
+      "approved_by": "pemilik-produk-2026-10-19",
+      "input_sha256": "7dcd901f634ac46c656bcb3f1a7e778703d010b744be709c5c905371ce95ca44",
+      "sha256": "65ea5f68d7f354da1387f45c193536b4b79a0acb4eea199c5326fa626c9c8530",
+      "bytes": 159714,
+      "generated_at": "2026-10-19T04:36:14Z"
+    },
+    {
+      "id": "brushing.zone4",
+      "file": "brushing.zone4.wav",
+      "text": "Sekarang sikat gigi bawah kanan.",
+      "approved_by": "pemilik-produk-2026-10-19",
+      "input_sha256": "85a61b188770c673d54dae266d77655adc872b94cb20fc8bf25c59f7b36362c5",
+      "sha256": "5833150f97925369af28e7beea074782cb0394c9a66979d6ca308ed89ff91737",
+      "bytes": 173154,
+      "generated_at": "2026-10-19T04:36:14Z"
+    },
+    {
+      "id": "brushing.done",
+      "file": "brushing.done.wav",
+      "text": "Hebat, selesai! Gigi sudah disikat. Jangan banyak berkumur, cukup buang busanya.",
+      "approved_by": "pemilik-produk-2026-10-19",
+      "input_sha256": "19395f6f7c59f00203a0d817b05d193a8feb7f17abb81f46c96444dea315e398",
+      "sha256": "dd0e335a8dee4ce2041d6efd8c1b47fd5180e83ff680390b0517ca2d3ae783eb",
+      "bytes": 319074,
+      "generated_at": "2026-10-19T04:38:35Z"
+    }
+  ]
+}

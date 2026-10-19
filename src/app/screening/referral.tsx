@@ -1,4 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { View } from 'react-native';
 
 import { Card } from '@/components/card';
@@ -7,11 +8,12 @@ import { LevelBadge } from '@/components/level-badge';
 import { Screen } from '@/components/screen';
 import { Text } from '@/components/ui/text';
 import { id } from '@/core/i18n/id';
+import { useLocalData } from '@/data/local-store';
 import { adviceText, triageRules, type Answer } from '@/domain/triage';
 import { redFlagQuestions } from '@/features/screening/pipeline';
 import { photoFromSession, referralFromRecord, type ReferralData } from '@/features/screening/referral-data';
+import { ensureReferral } from '@/features/screening/referral-sync';
 import { useScreeningSession } from '@/features/screening/session-store';
-import { useMockData } from '@/mock/store';
 import { formatDateLong, formatTime } from '@/ui/format';
 
 const t = id.screening.referral;
@@ -19,14 +21,14 @@ const answerLabel = id.screening.answers;
 
 const photoLabel: Record<ReferralData['photo'], string> = {
   assessed: t.photoAssessed,
-  not_assessed: t.photoNotAssessed,
+  not_sent: t.photoNotSent,
   not_taken: t.photoNotTaken,
   quality_failed: t.photoQualityFailed,
 };
 
 function useReferralData(recordId: string | undefined): ReferralData | null {
-  const kids = useMockData((s) => s.kids);
-  const record = useMockData((s) => (recordId ? s.screenings.find((r) => r.id === recordId) : undefined));
+  const kids = useLocalData((s) => s.kids);
+  const record = useLocalData((s) => (recordId ? s.screenings.find((r) => r.id === recordId) : undefined));
   const session = useScreeningSession();
   if (recordId) {
     return record ? referralFromRecord(record, kids.find((k) => k.id === record.childId)?.nickname ?? null) : null;
@@ -40,7 +42,7 @@ function useReferralData(recordId: string | undefined): ReferralData | null {
     reasons: session.outcome.output.reasons,
     answers: session.answers,
     pain: session.pain,
-    photo: photoFromSession(session.photoChoice, session.analysis?.detectorAvailable ?? false),
+    photo: photoFromSession(session.photoChoice, session.analysis?.photoStatus ?? null),
     rulesVersion: session.outcome.output.rules_version,
   };
 }
@@ -57,10 +59,18 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 // Referral letter to show on the phone at the puskesmas / dentist (offline). PDF export via
-// expo-print comes later (app/CLAUDE.md §4). The nickname exists only on this device.
+// expo-print comes later (app/CLAUDE.md §4). The nickname exists only on this device; the
+// server only gets the referral metadata (level, reason codes), never the letter.
 export default function Referral() {
   const { id: recordId } = useLocalSearchParams<{ id?: string }>();
   const data = useReferralData(recordId);
+  // Opening the letter of a saved, non-routine screening records its referral once
+  // (referral_created, queued behind the screening event by the sync bridge).
+  const sessionRecordId = useScreeningSession((s) => s.record?.id ?? null);
+  const screeningId = recordId ?? sessionRecordId;
+  useEffect(() => {
+    if (screeningId) ensureReferral(screeningId);
+  }, [screeningId]);
 
   if (!data) {
     return (

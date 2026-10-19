@@ -11,7 +11,7 @@ import { id } from '@/core/i18n/id';
 import { levelColors, palette, useTheme, type TriageLevel } from '@/core/theme';
 import { adviceText, triageRules } from '@/domain/triage';
 
-import { DraftNotice } from './draft-notice';
+
 import { PhotoWithFindings, type Finding } from './photo-findings';
 
 const t = id.screening.result;
@@ -117,14 +117,35 @@ export function ResultDetails({
     .map(adviceText)
     .filter((text): text is string => !!text);
 
+  // Group the fired rules by what they came from: red-flag answers, the photo, everything else.
+  const stageOf = new Map(triageRules.rules.map((r) => [r.id, r.stage]));
+  const redFlags = reasons.filter((r) => stageOf.get(r.id) === 'red_flag').map((r) => r.text);
+  const photoReasons = reasons.filter((r) => stageOf.get(r.id)?.startsWith('detection')).map((r) => r.text);
+  const other = reasons
+    .filter((r) => { const st = stageOf.get(r.id); return st !== 'red_flag' && !st?.startsWith('detection'); })
+    .map((r) => r.text);
+
   return (
     <View className="gap-6">
-      <LevelBadge level={level} />
+      {/* Red flag wins: the emergency card comes before everything else. */}
       {emergency ? <EmergencyCard adviceIds={adviceIds} /> : null}
-      <DraftNotice />
 
-      {photo ? (
-        <View className="gap-3">
+      <Card className="gap-4" testID="result-red-flags">
+        <Text variant="headline" accessibilityRole="header">
+          {t.redFlagsTitle}
+        </Text>
+        {redFlags.length ? (
+          <BulletList items={redFlags} icon="chevron-right" />
+        ) : (
+          <Text variant="body">{t.noRedFlags}</Text>
+        )}
+      </Card>
+
+      <Card className="gap-4" testID="result-photo">
+        <Text variant="headline" accessibilityRole="header">
+          {t.photoTitle}
+        </Text>
+        {photo ? (
           <PhotoWithFindings
             uri={photo.uri}
             width={photo.width}
@@ -132,38 +153,45 @@ export function ResultDetails({
             findings={findings}
             accessibilityLabel={findings.length ? t.photoWithFindings(findings.length) : id.screening.review.photoLabel}
           />
-          {findings.length ? (
-            <Card className="gap-3">
-              <Text variant="headline" accessibilityRole="header">
-                {t.findingsTitle}
+        ) : null}
+        {findings.map((f, i) => (
+          <View key={`${f.class}-${i}`} className="flex-row items-center gap-3">
+            <View className="size-7 items-center justify-center rounded-full bg-sun">
+              <Text variant="label" tone="onAccent">
+                {i + 1}
               </Text>
-              {findings.map((f, i) => (
-                <View key={`${f.class}-${i}`} className="flex-row items-center gap-3">
-                  <View className="size-7 items-center justify-center rounded-full bg-sun">
-                    <Text variant="label" tone="onAccent">
-                      {i + 1}
-                    </Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text variant="bodyStrong">{t.findings[f.class]}</Text>
-                    <Text variant="caption" tone="secondary">
-                      {t.findingCheck}
-                    </Text>
-                  </View>
-                </View>
-              ))}
-            </Card>
-          ) : null}
-        </View>
-      ) : null}
-      {photoNote ? <Banner tone={photoNote.tone} title={photoNote.title} message={photoNote.message} /> : null}
-
-      <Card className="gap-4">
-        <Text variant="headline" accessibilityRole="header">
-          {t.reasonsTitle}
-        </Text>
-        <BulletList items={reasons.map((r) => r.text)} icon="chevron-right" />
+            </View>
+            <View className="flex-1">
+              <Text variant="bodyStrong">{t.findings[f.class]}</Text>
+              <Text variant="caption" tone="secondary">
+                {t.findingCheck}
+              </Text>
+            </View>
+          </View>
+        ))}
+        {photoReasons.length ? <BulletList items={photoReasons} icon="chevron-right" /> : null}
+        {photoNote ? (
+          <Banner tone={photoNote.tone} title={photoNote.title} message={photoNote.message} />
+        ) : !findings.length && !photoReasons.length ? (
+          <Text variant="body">{photo ? t.noPhotoFindings : t.photoNotAssessed}</Text>
+        ) : null}
       </Card>
+
+      {other.length ? (
+        <Card className="gap-4">
+          <Text variant="headline" accessibilityRole="header">
+            {t.otherTitle}
+          </Text>
+          <BulletList items={other} icon="chevron-right" />
+        </Card>
+      ) : null}
+
+      <View className="gap-3">
+        <Text variant="headline" accessibilityRole="header">
+          {t.levelTitle}
+        </Text>
+        <LevelBadge level={level} />
+      </View>
 
       {advice.length ? (
         <Card className="gap-4">

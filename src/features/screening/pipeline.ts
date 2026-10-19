@@ -1,7 +1,7 @@
 // Screening flow logic, pure and testable. Order follows backend/api/docs/API.md §12 and
-// app/CLAUDE.md §3.3: questionnaire -> red flags short-circuit -> photo -> quality gate ->
-// detector -> triage. Every level comes from the triage engine; this file only decides
-// which step comes next and assembles the engine input.
+// app/CLAUDE.md §3.3: questionnaire -> photo (red flags no longer short-circuit, ADR 021) -> quality gate ->
+// detector (DentisAI API, ADR 020) -> triage. Every level comes from the triage engine; this
+// file only decides which step comes next and assembles the engine input.
 import {
   TriageError,
   evaluate,
@@ -12,13 +12,10 @@ import {
   type TriageInput,
   type TriageOutput,
 } from '@/domain/triage';
-import type { Detection, Detector } from '@/ml/detector';
-import type { PixelImage } from '@/ml/quality-gate';
+import type { Detection } from '@/ml/detector';
 
 export const redFlagQuestions = triageRules.questions.filter((q) => q.group === 'red_flag');
 export const symptomQuestions = triageRules.questions.filter((q) => q.group !== 'red_flag');
-
-const topLevel = triageRules.levels.reduce((a, b) => (b.rank > a.rank ? b : a)).id;
 
 export type Pain = number | 'unknown';
 export type Answers = Partial<Record<string, Answer>>;
@@ -36,23 +33,6 @@ export function allAnswered(answers: Answers, questions = triageRules.questions)
 }
 
 /**
- * True when the answers so far already reach the top level (emergency) whatever comes next.
- * Unanswered questions count as "no" and missing pain as 0 — the lowest possible inputs — and
- * the engine is monotone in answers (no <= unknown <= yes) and pain (backend property tests),
- * so an emergency here stays an emergency. Detections can never lower the level either, so the
- * photo is skipped (same short-circuit as /v1/screening/analyze).
- */
-export function isEmergencyAlready(answers: Answers, pain: Pain | null): boolean {
-  const lowest = withLowestForUnasked(answers, pain);
-  const out = evaluate(
-    triageRules,
-    { detections: [], photo_status: 'not_taken', symptoms: lowest.answers, age_months: null, pain: lowest.pain },
-    triageParams,
-  );
-  return out.level === topLevel;
-}
-
-/**
  * Questions the flow skipped after a red flag were never asked. Only for that short-circuit,
  * they enter the engine as the lowest values ("no", pain 0): the level is already the top level
  * and cannot change, and the reasons stay limited to what the parent actually answered. This is
@@ -67,26 +47,17 @@ export function withLowestForUnasked(answers: Answers, pain: Pain | null): { ans
 
 export type PhotoAnalysis = {
   photoStatus: PhotoStatus;
+  /** Findings from the server detector (with overlay boxes); empty without an assessed photo. */
   detections: Detection[];
-  /** False when no detector ships or it failed: the photo was taken but not assessed. */
-  detectorAvailable: boolean;
+  /** Detector model version reported by the API; null when no photo was assessed. */
+  modelVersion: string | null;
 };
 
-/** Runs the detector on a photo that passed the quality gate. Never invents detections. */
-export async function analyzePhoto(pixels: PixelImage | null, detector: Detector): Promise<PhotoAnalysis> {
-  if (!pixels || !detector.available) return { photoStatus: 'not_taken', detections: [], detectorAvailable: false };
-  try {
-    const detections = await detector.detect(pixels);
-    return { photoStatus: 'assessed', detections, detectorAvailable: true };
-  } catch {
-    // Fail closed: an unassessed photo can only keep the level the same or higher.
-    return { photoStatus: 'not_taken', detections: [], detectorAvailable: false };
-  }
-}
+export const noPhotoAnalysis = (photoStatus: PhotoStatus): PhotoAnalysis => ({ photoStatus, detections: [], modelVersion: null });
 
 /**
  * Engine input. Boxes stay with the app for the overlay and are stripped here (ADR 014: box
- * size never reaches triage). A photo that was taken but not assessed by a model counts as
+ * size never reaches triage). A photo that was taken but not sent to the detector counts as
  * no photo for triage (`not_taken`); the engine treats it exactly like `quality_failed`.
  */
 export function buildTriageInput(args: {

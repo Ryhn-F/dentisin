@@ -6,18 +6,22 @@ import { palette, shadows } from '@/core/theme';
 import { Icon, type IconName } from './icon';
 import { Text } from './ui/text';
 
-export type SyncStatus = 'synced' | 'pending' | 'offline' | 'local';
+export type SyncStatus = 'synced' | 'pending' | 'offline' | 'local' | 'attention';
 
 const icons: Record<SyncStatus, IconName> = {
   synced: 'cloud-done',
   pending: 'cloud-upload',
   offline: 'cloud-off',
   local: 'smartphone',
+  attention: 'sync-problem',
 };
 
-// Offline is a normal state, not an error: neutral colors only.
+const labels: Record<SyncStatus, string> = { ...id.components.sync, attention: id.syncV2.status.attention };
+
+// Offline is a normal state, not an error: neutral colors only. "attention" (rejected events,
+// sign-in needed) is a call to look, not an alarm, so it stays neutral too.
 export function SyncStatusPill({ status }: { status: SyncStatus }) {
-  const label = id.components.sync[status];
+  const label = labels[status];
   return (
     <View
       accessible

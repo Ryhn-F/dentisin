@@ -13,6 +13,7 @@ export default function EntryLayout() {
       <Stack.Screen name="login" options={{ ...onPrimaryHeaderOptions, title: '' }} />
       <Stack.Screen name="register" options={{ ...onPrimaryHeaderOptions, title: '' }} />
       <Stack.Screen name="check-email" options={{ title: id.auth.checkEmail.title }} />
+      <Stack.Screen name="child-login" options={{ title: id.childLogin.title }} />
     </Stack>
   );
 }

@@ -11,7 +11,7 @@ const t = id.features;
 
 // Bold course-card grid (design reference 1). Skrining, the main feature, comes first
 // and opens its tab; while it waits for the dentist's sign-off the tile says so.
-// Class mode appears only for the `kader` role (role lookup arrives in phase 4).
+// No class mode: the kader role and class rosters were removed (ADR 018).
 export default function Features() {
   return (
     <Screen className="gap-4">
